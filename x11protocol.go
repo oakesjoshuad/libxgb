@@ -50,16 +50,16 @@ func pad(expr interface{}) (padding []byte) {
 }
 
 func NewClientSetup(host, display string) (cs *clientsetup, err error) {
-	protoname, protodata, err := xauthinfo(host, display)
+	xa, err := xauthinfo(host, display)
 	if err != nil {
 		return cs, err
 	}
 	cs.MajorVersion = xprotoversion
 	cs.MinorVersion = xprotorevision
-	cs.AuthProtoNameLen = card16(len(protoname))
-	cs.AuthProtoName = protoname
-	cs.AuthProtoDataLen = card16(len(protodata))
-	cs.AuthProtoData = protodata
+	cs.AuthProtoNameLen = card16(len(xa.protocol))
+	cs.AuthProtoName = xa.protocol
+	cs.AuthProtoDataLen = card16(len(xa.data))
+	cs.AuthProtoData = xa.data
 	return
 }
 

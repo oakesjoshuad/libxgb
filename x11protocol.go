@@ -35,6 +35,7 @@ type clientsetup struct {
 	AuthProtoData    string
 }
 
+// pad pads data to align with 4 byte units
 func pad(expr interface{}) (padding []byte) {
 	switch v := expr.(type) {
 	case int:

@@ -76,6 +76,7 @@ func readShort(rdr io.Reader) (uint16, error) {
 	return uint16(buf[0])*256 + uint16(buf[1]), nil
 }
 
+// readString
 func readString(rdr io.Reader) (string, error) {
 	width, err := readShort(rdr)
 	if err != nil {

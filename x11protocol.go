@@ -1,4 +1,5 @@
-package libxGb
+// Package libxgb ...
+package libxgb
 
 import (
 	"bytes"
@@ -26,7 +27,8 @@ type card8 uint8
 type card16 uint16
 type card32 uint32
 
-type clientsetup struct {
+// Clientsetup ...
+type Clientsetup struct {
 	MajorVersion     card16
 	MinorVersion     card16
 	AuthProtoNameLen card16
@@ -49,8 +51,9 @@ func pad(expr interface{}) (padding []byte) {
 	return
 }
 
-func NewClientSetup(host, display string) (cs *clientsetup, err error) {
-	xa, err := xauthinfo(host, display)
+// NewClientSetup ...
+func NewClientSetup(host, display string) (cs *Clientsetup, err error) {
+	xa, err := xau.Xauth(host, display)
 	if err != nil {
 		return cs, err
 	}
@@ -63,7 +66,8 @@ func NewClientSetup(host, display string) (cs *clientsetup, err error) {
 	return
 }
 
-func (cs *clientsetup) Pack() []byte {
+// Pack ...
+func (cs *Clientsetup) Pack() []byte {
 	var buf bytes.Buffer
 	pack(&buf, endianess, binary.BigEndian)
 	pack(&buf, endianess, pad(1))

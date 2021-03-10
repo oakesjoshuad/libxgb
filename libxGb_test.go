@@ -1,9 +1,11 @@
-package libxGb
+package libxgb
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestClientSetup(t *testing.T) {
-	if xauth, err := xauthinfo("", ":0"); err != nil {
+	if xauth, err := xau.Xauth("", ":0"); err != nil {
 		t.Fatal(err)
 	} else {
 		println(xauth)

@@ -2,6 +2,7 @@ package libxgb
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -10,24 +11,22 @@ func TestConnection(t *testing.T) {
 		Description string
 		Input       string
 		Output      *Display
+		Err         error
 	}{
-		{"No Input", "", &Display{Host: "localhost", Protocol: "", Number: 0, Screen: 0}},
-		{"With Input", "void/unix:0.10", &Display{Host: "void", Protocol: "unix", Number: 0, Screen: 10}},
+		{"No Input", "", &Display{"localhost", "unix", 0, 0}, nil},
+		{"With Input", "void/unix:0.10", &Display{"void", "unix", 0, 10}, nil},
+		{"With only hostname as input", "localhost", &Display{"localhost", "unix", 0, 0}, nil},
+		{"With bad hostname", "carbon", &Display{"localhost", "unix", 0, 0}, strconv.ErrSyntax},
 	}
 
 	for _, test := range cases {
 		t.Run(test.Description, func(t *testing.T) {
 			dp, err := parseDisplay(test.Input)
-			if err != nil {
-				t.Log(err)
-				t.Fail()
-			}
-
 			if reflect.DeepEqual(dp, test.Output) {
 				t.Log(dp)
 			} else {
 				t.Logf("Expected: %s\nRecieved: %s", test.Output, dp)
-				t.Fail()
+				t.Error(err)
 			}
 		})
 	}

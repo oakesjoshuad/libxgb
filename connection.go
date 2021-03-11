@@ -16,17 +16,26 @@ type Display struct {
 	Screen   uint64
 }
 
+const (
+	unixBase = "/tmp/.X11-unix/X"
+)
+
+var (
+	// ErrDisplayName ...
+	ErrDisplayName = errors.New("Unable to parse display")
+)
+
 func (dp *Display) String() string {
 	return fmt.Sprintf("Host: %s, Protocol: %s, Number: %d, Screen: %d", dp.Host, dp.Protocol, dp.Number, dp.Screen)
 }
 
-// parseDisplay
+// ParseDisplay will parse a given display string; if no string is given, it will check environment variables.
 func parseDisplay(hostname string) (dp *Display, err error) {
 
 	// checking if hostname is empty, if so, check environment variable for DISPLAY, else fail
-	if hostname == "" {
+	if !strings.Contains(hostname, ":") {
 		if hostname = os.Getenv("DISPLAY"); hostname == "" {
-			err = errors.New("Unable to parse display name")
+			err = ErrDisplayName
 			return
 		}
 	}
@@ -37,11 +46,12 @@ func parseDisplay(hostname string) (dp *Display, err error) {
 
 	if slash < 0 {
 		dp.Host = "localhost"
+		dp.Protocol = "unix"
 	} else {
 		dp.Host = hostname[:slash]
+		slash++
+		dp.Protocol = hostname[slash:colon]
 	}
-	slash++
-	dp.Protocol = hostname[slash:colon]
 	colon++
 	if dot < 0 {
 		dp.Screen = 0

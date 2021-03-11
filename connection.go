@@ -26,7 +26,7 @@ var (
 )
 
 func (dp *Display) String() string {
-	return fmt.Sprintf("Host: %s, Protocol: %s, Number: %d, Screen: %d", dp.Host, dp.Protocol, dp.Number, dp.Screen)
+	return fmt.Sprintf("%s/%s:%d.%d", dp.Host, dp.Protocol, dp.Number, dp.Screen)
 }
 
 // ParseDisplay will parse a given display string; if no string is given, it will check environment variables.
@@ -56,15 +56,24 @@ func parseDisplay(hostname string) (dp *Display, err error) {
 	if dot < 0 {
 		dp.Screen = 0
 		if dp.Number, err = strconv.ParseUint(hostname[colon:], 10, 32); err != nil {
-			return
+			if errors.Is(err, strconv.ErrSyntax) {
+				dp.Number = 0
+				err = nil
+			}
 		}
 	} else {
 		if dp.Number, err = strconv.ParseUint(hostname[colon:dot], 10, 32); err != nil {
-			return
+			if errors.Is(err, strconv.ErrSyntax) {
+				dp.Number = 0
+				err = nil
+			}
 		}
 		dot++
 		if dp.Screen, err = strconv.ParseUint(hostname[dot:], 10, 32); err != nil {
-			return
+			if errors.Is(err, strconv.ErrSyntax) {
+				dp.Screen = 0
+				err = nil
+			}
 		}
 	}
 	return

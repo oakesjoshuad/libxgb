@@ -27,8 +27,8 @@ type card8 uint8
 type card16 uint16
 type card32 uint32
 
-// Clientsetup ...
-type Clientsetup struct {
+// ClientSetup ...
+type ClientSetup struct {
 	MajorVersion     card16
 	MinorVersion     card16
 	AuthProtoNameLen card16
@@ -52,22 +52,22 @@ func pad(expr interface{}) (padding []byte) {
 }
 
 // NewClientSetup ...
-func NewClientSetup(host, display string) (cs *Clientsetup, err error) {
-	xa, err := xau.Xauth(host, display)
-	if err != nil {
-		return cs, err
-	}
-	cs.MajorVersion = xprotoversion
-	cs.MinorVersion = xprotorevision
-	cs.AuthProtoNameLen = card16(len(xa.protocol))
-	cs.AuthProtoName = xa.protocol
-	cs.AuthProtoDataLen = card16(len(xa.data))
-	cs.AuthProtoData = xa.data
-	return
-}
+// func NewClientSetup(host, display string) (cs *ClientSetup, err error) {
+// 	xa, err := xau.Xauth(host, display)
+// 	if err != nil {
+// 		return cs, err
+// 	}
+// 	cs.MajorVersion = xprotoversion
+// 	cs.MinorVersion = xprotorevision
+// 	cs.AuthProtoNameLen = card16(len(xa.protocol))
+// 	cs.AuthProtoName = xa.protocol
+// 	cs.AuthProtoDataLen = card16(len(xa.data))
+// 	cs.AuthProtoData = xa.data
+// 	return
+// }
 
 // Pack ...
-func (cs *Clientsetup) Pack() []byte {
+func (cs *ClientSetup) Pack() []byte {
 	var buf bytes.Buffer
 	pack(&buf, endianess, binary.BigEndian)
 	pack(&buf, endianess, pad(1))

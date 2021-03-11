@@ -29,8 +29,8 @@ func (dp *Display) String() string {
 	return fmt.Sprintf("%s/%s:%d.%d", dp.Host, dp.Protocol, dp.Number, dp.Screen)
 }
 
-// ParseDisplay will parse a given display string; if no string is given, it will check environment variables.
-func parseDisplay(hostname string) (dp *Display, err error) {
+// NewDisplay will parse a given display string; if no string is given, it will check environment variables.
+func NewDisplay(hostname string) (dp *Display, err error) {
 
 	// checking if hostname is empty, if so, check environment variable for DISPLAY, else fail
 	if !strings.Contains(hostname, ":") {

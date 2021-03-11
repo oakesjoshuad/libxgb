@@ -21,7 +21,7 @@ func TestConnection(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.Description, func(t *testing.T) {
-			dp, err := parseDisplay(test.Input)
+			dp, err := NewDisplay(test.Input)
 			if !reflect.DeepEqual(dp, test.Output) || err != nil {
 				t.Error(err)
 			}

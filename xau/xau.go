@@ -4,6 +4,7 @@ package xau
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 )
@@ -30,6 +31,16 @@ type Xauth struct {
 	Number  string
 	Name    string
 	Data    string
+}
+
+func (xa *Xauth) String() string {
+	return fmt.Sprintf("family: %d, address: %s, number: %s, name: %s, data: %s",
+		xa.Family,
+		xa.Address,
+		xa.Number,
+		xa.Name,
+		xa.Data,
+	)
 }
 
 // XauFileName returns the the location of the .Xauthority file

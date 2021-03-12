@@ -1,6 +1,7 @@
 package libxgb
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -11,6 +12,17 @@ import (
 // Display ...
 type Display struct {
 	Host, Protocol, Number, Screen string
+
+	connection
+}
+
+type connection struct {
+	net.Conn
+	ctx   context.Context
+	send  chan []byte
+	recv  chan []byte
+	errs  chan error
+	close chan bool
 }
 
 const unixBase = "/tmp/.X11-unix/X"
@@ -24,45 +36,90 @@ func (dp *Display) String() string {
 	return fmt.Sprintf("%s/%s:%s.%s", dp.Host, dp.Protocol, dp.Number, dp.Screen)
 }
 
-// Open ...
-func (dp *Display) Open() (ncp net.Conn, err error) {
-	if dp.Protocol != "unix" {
-		return dp.openTCP()
+func (dp *Display) unixAddress() string {
+	if dp.Screen != "" {
+		return fmt.Sprintf("%s%s.%s", unixBase, dp.Number, dp.Screen)
+	} else {
+		return fmt.Sprintf("%s%s", unixBase, dp.Number)
 	}
-	ncp = new(net.UnixConn)
-	ncp, err = dp.openUnix()
+}
+
+// Open ...
+func (dp *Display) Open(pctx context.Context) (err error) {
+	ctx, cancel := context.WithCancel(pctx)
+	defer cancel()
+	if dp.Protocol != "unix" {
+		err = dp.openTCP(ctx)
+	} else {
+		err = dp.openUnix(ctx)
+	}
+	// recieve channel
+	dp.connection.recv = make(chan []byte)
+	// send channel
+	dp.connection.send = make(chan []byte)
+	// sentinal channel to signal close
+	dp.connection.close = make(chan bool)
+
 	return
 }
 
-func (dp *Display) openTCP() (*net.TCPConn, error) {
-	return nil, errors.New("openTCP function not implemented")
+// TODO: comment on tx and rx functions
+// TODO: write tests for this open and close
+// TODO: should I binary write, or just use the given write methods
+// TODO: conn type based auth, rx and tx
+
+// Close ...
+func (dp *Display) Close() error {
+	dp.close <- true
+	return dp.connection.Close()
 }
 
-func (dp *Display) openUnix() (*net.UnixConn, error) {
+func (dp *Display) tx() {
+	select {
+	case msg := <-dp.connection.send:
+		if n, err := dp.connection.Write(msg); err != nil {
+			dp.connection.errs <- err
+		} else if n != len(msg) {
+			dp.connection.errs <- errors.New("Display.tx did not transmit full message")
+		}
+	case <-dp.connection.close:
+		close(dp.connection.send)
+	}
+}
+
+func (dp *Display) openTCP(pctx context.Context) (err error) {
+	return errors.New("openTCP function not implemented")
+}
+
+func (dp *Display) openUnix(pctx context.Context) error {
+	ctx, cancel := context.WithCancel(pctx)
+	defer cancel()
 	if dp.Protocol != "unix" {
-		return nil, errors.New("Incorrect Protocol")
+		return fmt.Errorf("Incorrect protocol: %s", dp.Protocol)
 	}
-	address := strings.Join([]string{unixBase, dp.Number}, "")
-	if dp.Screen != "" {
-		address = strings.Join([]string{address, dp.Screen}, ".")
-	}
-	uap, err := net.ResolveUnixAddr(dp.Protocol, address)
+	var dlr net.Dialer
+	dlr.LocalAddr = nil
+	raddr, err := net.ResolveUnixAddr(dp.Protocol, dp.unixAddress())
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return net.DialUnix(dp.Protocol, nil, uap)
+	if dp.connection.Conn, err = dlr.DialContext(ctx, dp.Protocol, raddr.String()); err != nil {
+		return err
+	}
+	return nil
 }
 
-// NewDisplay will parse a given display string; if no string is given, it will check environment variables.
+// NewDisplay returns a populated Display structure with sane defaults; constructed from
+// a, validated, passed in display string or the environment variable DISPLAY
 func NewDisplay(hostname string) (dp *Display, err error) {
 
-	// checking if hostname is empty, if so, check environment variable for DISPLAY, else fail
 	if !strings.Contains(hostname, ":") {
 		if hostname = os.Getenv("DISPLAY"); hostname == "" {
 			err = ErrDisplayName
 			return
 		}
 	}
+
 	dp = new(Display)
 	slash := strings.LastIndex(hostname, "/")
 	colon := strings.LastIndex(hostname, ":")

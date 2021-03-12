@@ -1,6 +1,7 @@
 package libxgb
 
 import (
+	"net"
 	"reflect"
 	"testing"
 )
@@ -42,6 +43,13 @@ func TestConnection(t *testing.T) {
 		} else {
 			t.Log(cp.LocalAddr())
 			t.Log(cp.RemoteAddr())
+			if unixcp, ok := cp.(*net.UnixConn); ok {
+				if ruc, err := unixcp.SyscallConn(); err != nil {
+					t.Error(err)
+				} else {
+
+				}
+			}
 
 		}
 	})

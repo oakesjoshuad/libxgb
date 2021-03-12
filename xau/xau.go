@@ -10,14 +10,19 @@ import (
 )
 
 const (
-	slashDotXauthority  = "/.Xauthority"
-	familyLocal         = 256
-	familyWild          = 65535
-	familyNetname       = 254
-	familyKrb5Principal = 253
-	familyLocalHost     = 252
+	// FamilyLocal ...
+	FamilyLocal = 256
+	// FamilyWild ...
+	FamilyWild = 65535
+	// FamilyNetName ...
+	FamilyNetName = 254
+	// FamilyKrb5Principal ...
+	FamilyKrb5Principal = 253
+	// FamilyLocalHost ...
+	FamilyLocalHost = 252
 
-	authProtoMIT = "MIT-MAGIC-COOKIE-1"
+	slashDotXauthority = "/.Xauthority"
+	authProtoMIT       = "MIT-MAGIC-COOKIE-1"
 )
 
 var (

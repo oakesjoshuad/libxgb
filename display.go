@@ -39,9 +39,8 @@ func (dp *Display) String() string {
 func (dp *Display) unixAddress() string {
 	if dp.Screen != "" {
 		return fmt.Sprintf("%s%s.%s", unixBase, dp.Number, dp.Screen)
-	} else {
-		return fmt.Sprintf("%s%s", unixBase, dp.Number)
 	}
+	return fmt.Sprintf("%s%s", unixBase, dp.Number)
 }
 
 // Open ...

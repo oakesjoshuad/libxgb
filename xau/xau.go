@@ -95,7 +95,7 @@ func GetAuthByAddr(family uint16, address, number, name string) (xa *Xauth, err 
 		return
 	}
 	for xa, err = xauReadAuth(xaufd); err == nil; xa, err = xauReadAuth(xaufd) {
-		if (family == familyWild || xa.Family == familyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) && (xa.Name == name) {
+		if (family == FamilyWild || xa.Family == FamilyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) && (xa.Name == name) {
 			return
 		}
 	}
@@ -115,7 +115,7 @@ func GetBestAuthByAddr(family uint16, address, number string, types []string) (b
 	bestType := len(types)
 	xa := new(Xauth)
 	for xa, err = xauReadAuth(xaufd); err == nil && xa != nil; xa, err = xauReadAuth(xaufd) {
-		if (family == familyWild || xa.Family == familyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) {
+		if (family == FamilyWild || xa.Family == FamilyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) {
 			if bestType == 0 {
 				best = xa
 				break

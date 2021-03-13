@@ -1,6 +1,7 @@
 package libxgb
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,12 +14,12 @@ import (
 type Display struct {
 	Host, Protocol, Number, Screen string
 
+	ctx context.Context
 	connection
 }
 
 type connection struct {
 	net.Conn
-	ctx   context.Context
 	send  chan []byte
 	recv  chan []byte
 	errs  chan error
@@ -44,7 +45,13 @@ func (dp *Display) unixAddress() string {
 }
 
 // Open ...
-func (dp *Display) Open(pctx context.Context) (err error) {
+func (dp *Display) Open() error {
+	dp.ctx = context.Background()
+	return dp.OpenWithContext(dp.ctx)
+}
+
+// OpenWithContext ...
+func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()
 	if dp.Protocol != "unix" {
@@ -59,6 +66,9 @@ func (dp *Display) Open(pctx context.Context) (err error) {
 	// sentinal channel to signal close
 	dp.connection.close = make(chan bool)
 
+	go dp.tx()
+	go dp.rx()
+
 	return
 }
 
@@ -69,20 +79,33 @@ func (dp *Display) Open(pctx context.Context) (err error) {
 
 // Close ...
 func (dp *Display) Close() error {
-	dp.close <- true
+	dp.connection.close <- true
+	close(dp.connection.close)
 	return dp.connection.Close()
 }
 
 func (dp *Display) tx() {
 	select {
-	case msg := <-dp.connection.send:
-		if n, err := dp.connection.Write(msg); err != nil {
-			dp.connection.errs <- err
+	case msg := <-dp.send:
+		if n, err := dp.Write(msg); err != nil {
+			dp.errs <- err
 		} else if n != len(msg) {
-			dp.connection.errs <- errors.New("Display.tx did not transmit full message")
+			dp.errs <- errors.New("Display.tx did not transmit full message")
 		}
 	case <-dp.connection.close:
-		close(dp.connection.send)
+		close(dp.send)
+	}
+}
+
+func (dp *Display) rx() {
+	select {
+	case <-dp.connection.close:
+		close(dp.recv)
+	default:
+		var buff bytes.Buffer
+		if _, err := buff.ReadFrom(dp.connection); err != nil {
+
+		}
 	}
 }
 

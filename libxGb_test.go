@@ -1,7 +1,6 @@
 package libxgb
 
 import (
-	"context"
 	"reflect"
 	"testing"
 )
@@ -13,11 +12,11 @@ func TestConnection(t *testing.T) {
 		Output      *Display
 		Err         error
 	}{
-		{"No Input", "", &Display{"localhost", "unix", "0", "", connection{}}, nil},
-		{"With Input", "void/unix:0.10", &Display{"void", "unix", "0", "10", connection{}}, nil},
-		{"With only hostname as input", "localhost", &Display{"localhost", "unix", "0", "", connection{}}, nil},
-		{"With bad hostname", "carbon", &Display{"localhost", "unix", "0", "", connection{}}, nil},
-		{"With only colon", ":", &Display{"localhost", "unix", "0", "", connection{}}, nil},
+		{"No Input", "", &Display{"localhost", "unix", "0", "", nil, connection{}}, nil},
+		{"With Input", "void/unix:0.10", &Display{"void", "unix", "0", "10", nil, connection{}}, nil},
+		{"With only hostname as input", "localhost", &Display{"localhost", "unix", "0", "", nil, connection{}}, nil},
+		{"With bad hostname", "carbon", &Display{"localhost", "unix", "0", "", nil, connection{}}, nil},
+		{"With only colon", ":", &Display{"localhost", "unix", "0", "", nil, connection{}}, nil},
 	}
 
 	t.Run("Testing NewDisplay", func(t *testing.T) {
@@ -33,17 +32,18 @@ func TestConnection(t *testing.T) {
 		}
 	})
 
-	t.Run("Testing open", func(t *testing.T) {
-		ctx := context.Background()
-		defer ctx.Done()
+	t.Run("Testing open/close", func(t *testing.T) {
 		dp, err := NewDisplay("")
 		if err != nil {
 			t.Error(err)
 		}
-		if err := dp.Open(ctx); err != nil {
+		if err := dp.Open(); err != nil {
 			t.Error(err)
 		} else {
 			t.Log(dp.connection.RemoteAddr())
+		}
+		if err := dp.Close(); err != nil {
+			t.Error(err)
 		}
 	})
 }

@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"strings"
+
+	"github.com/oakesjoshuad/libxgb/xau"
 )
 
 // Display ...
@@ -73,6 +75,12 @@ func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
 
 	go dp.tx()
 	go dp.rx()
+
+	// TODO:
+	xauth, err := xau.GetAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, xau.MIT)
+	if err != nil {
+		return err
+	}
 
 	return
 }

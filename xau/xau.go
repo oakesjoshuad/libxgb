@@ -20,9 +20,10 @@ const (
 	FamilyKrb5Principal = 253
 	// FamilyLocalHost ...
 	FamilyLocalHost = 252
+	// MIT MIT-MAGIC-COOKIE-1
+	MIT = "MIT-MAGIC-COOKIE-1"
 
 	slashDotXauthority = "/.Xauthority"
-	authProtoMIT       = "MIT-MAGIC-COOKIE-1"
 )
 
 var (

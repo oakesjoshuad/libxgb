@@ -14,8 +14,8 @@ import (
 type Display struct {
 	Host, Protocol, Number, Screen string
 
-	ctx context.Context
-	connection
+	ctx        context.Context // private encapsulated context, to assist in cancelling requests
+	connection connection      // encapsulating the connection to expose only needed functionality.
 }
 
 type connection struct {
@@ -86,21 +86,21 @@ func (dp *Display) Close() error {
 
 func (dp *Display) tx() {
 	select {
-	case msg := <-dp.send:
-		if n, err := dp.Write(msg); err != nil {
-			dp.errs <- err
+	case msg := <-dp.connection.send:
+		if n, err := dp.connection.Write(msg); err != nil {
+			dp.connection.errs <- err
 		} else if n != len(msg) {
-			dp.errs <- errors.New("Display.tx did not transmit full message")
+			dp.connection.errs <- errors.New("Display.tx did not transmit full message")
 		}
 	case <-dp.connection.close:
-		close(dp.send)
+		close(dp.connection.send)
 	}
 }
 
 func (dp *Display) rx() {
 	select {
 	case <-dp.connection.close:
-		close(dp.recv)
+		close(dp.connection.recv)
 	default:
 		var buff bytes.Buffer
 		if _, err := buff.ReadFrom(dp.connection); err != nil {

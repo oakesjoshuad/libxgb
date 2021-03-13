@@ -1,27 +1,19 @@
 package xau
 
 import (
-	"os"
 	"testing"
 )
 
 func TestXauth(t *testing.T) {
-	filename, err := xauFileName()
-	if err != nil {
-		t.Fatal(err)
+	authNames := []string{"MIT-MAGIC-COOKIE-1"}
+	if xai, err := GetAuthByAddr(FamilyLocal, "void", "0", authNames[0]); err != nil {
+		t.Errorf("Unable to find authinfo; %w", err)
+	} else {
+		t.Log("GetAuthByAddr: ", xai)
 	}
-	t.Log(filename)
-
-	xafd, err := os.Open(filename)
-	if err != nil {
-		t.Fatal(err)
+	if xai, err := GetBestAuthByAddr(FamilyLocal, "void", "0", authNames); err != nil {
+		t.Errorf("Unable to find authinfo; %w", err)
+	} else {
+		t.Log("GetBestAuthByAddr: ", xai)
 	}
-	defer xafd.Close()
-
-	xai, err := xauReadAuth(xafd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(xai)
-	xafd.Close()
 }

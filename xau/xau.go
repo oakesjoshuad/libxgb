@@ -20,23 +20,22 @@ const (
 	FamilyKrb5Principal = 253
 	// FamilyLocalHost ...
 	FamilyLocalHost = 252
-	// MIT MIT-MAGIC-COOKIE-1
-	MIT = "MIT-MAGIC-COOKIE-1"
 
 	slashDotXauthority = "/.Xauthority"
 )
 
 var (
-	errXauthorityLocation = errors.New("Unable to locate Xauthority file")
+	// ErrXauthorityLocation ...
+	ErrXauthorityLocation = errors.New("Unable to locate Xauthority file")
 )
 
 // Xauth ...
 type Xauth struct {
-	Family  uint16
-	Address string
-	Number  string
-	Name    string
-	Data    string
+	Family   uint16
+	Address  string
+	Number   string
+	AuthName string
+	AuthData string
 }
 
 func (xa *Xauth) String() string {
@@ -44,8 +43,8 @@ func (xa *Xauth) String() string {
 		xa.Family,
 		xa.Address,
 		xa.Number,
-		xa.Name,
-		xa.Data,
+		xa.AuthName,
+		xa.AuthData,
 	)
 }
 
@@ -57,7 +56,7 @@ func xauFileName() (string, error) {
 	if home := os.Getenv("HOME"); home != "" {
 		return home + slashDotXauthority, nil
 	}
-	return "", errXauthorityLocation
+	return "", ErrXauthorityLocation
 }
 
 // XauReadAuth returns Xauth
@@ -75,10 +74,10 @@ func xauReadAuth(rdr io.Reader) (xa *Xauth, err error) {
 	if xa.Number, err = readString(rdr); err != nil {
 		return
 	}
-	if xa.Name, err = readString(rdr); err != nil {
+	if xa.AuthName, err = readString(rdr); err != nil {
 		return
 	}
-	if xa.Data, err = readString(rdr); err != nil {
+	if xa.AuthData, err = readString(rdr); err != nil {
 		return
 	}
 	return
@@ -96,7 +95,7 @@ func GetAuthByAddr(family uint16, address, number, name string) (xa *Xauth, err 
 		return
 	}
 	for xa, err = xauReadAuth(xaufd); err == nil; xa, err = xauReadAuth(xaufd) {
-		if (family == FamilyWild || xa.Family == FamilyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) && (xa.Name == name) {
+		if (family == FamilyWild || xa.Family == FamilyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) && (xa.AuthName == name) {
 			return
 		}
 	}
@@ -104,7 +103,7 @@ func GetAuthByAddr(family uint16, address, number, name string) (xa *Xauth, err 
 }
 
 // GetBestAuthByAddr ...
-func GetBestAuthByAddr(family uint16, address, number string, types []string) (best *Xauth, err error) {
+func GetBestAuthByAddr(family uint16, address, number string, authTypes []string) (best *Xauth, err error) {
 	xaufilename, err := xauFileName()
 	if err != nil {
 		return
@@ -113,28 +112,18 @@ func GetBestAuthByAddr(family uint16, address, number string, types []string) (b
 	if err != nil {
 		return
 	}
-	bestType := len(types)
 	xa := new(Xauth)
-	for xa, err = xauReadAuth(xaufd); err == nil && xa != nil; xa, err = xauReadAuth(xaufd) {
+	for xa, err = xauReadAuth(xaufd); err == nil; xa, err = xauReadAuth(xaufd) {
 		if (family == FamilyWild || xa.Family == FamilyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) {
-			if bestType == 0 {
-				best = xa
-				break
-			}
-			for t, name := range types {
-				if name != xa.Name {
-					break
-				}
-				if t < bestType {
+			for _, authType := range authTypes {
+				if authType == xa.AuthName {
 					best = xa
-					bestType = t
-					if t == 0 {
-						break
-					}
 				}
 			}
-
 		}
+	}
+	if err == io.EOF {
+		err = nil
 	}
 	return
 }

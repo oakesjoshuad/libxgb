@@ -14,16 +14,21 @@ import (
 type Display struct {
 	Host, Protocol, Number, Screen string
 
-	ctx        context.Context // private encapsulated context, to assist in cancelling requests
-	connection connection      // encapsulating the connection to expose only needed functionality.
+	// encapsulating the connection to expose only needed functionality.
+	connection connection
 }
 
 type connection struct {
 	net.Conn
-	send  chan []byte
-	recv  chan []byte
+	send  chan message
+	recv  chan message
 	errs  chan error
 	close chan bool
+}
+
+type message struct {
+	length  int64
+	payload []byte
 }
 
 const unixBase = "/tmp/.X11-unix/X"
@@ -46,8 +51,8 @@ func (dp *Display) unixAddress() string {
 
 // Open ...
 func (dp *Display) Open() error {
-	dp.ctx = context.Background()
-	return dp.OpenWithContext(dp.ctx)
+	ctx := context.Background()
+	return dp.OpenWithContext(ctx)
 }
 
 // OpenWithContext ...
@@ -60,9 +65,9 @@ func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
 		err = dp.openUnix(ctx)
 	}
 	// recieve channel
-	dp.connection.recv = make(chan []byte)
+	dp.connection.recv = make(chan message)
 	// send channel
-	dp.connection.send = make(chan []byte)
+	dp.connection.send = make(chan message)
 	// sentinal channel to signal close
 	dp.connection.close = make(chan bool)
 
@@ -75,7 +80,6 @@ func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
 // TODO: comment on tx and rx functions
 // TODO: write tests for this open and close
 // TODO: should I binary write, or just use the given write methods
-// TODO: conn type based auth, rx and tx
 
 // Close ...
 func (dp *Display) Close() error {
@@ -87,9 +91,9 @@ func (dp *Display) Close() error {
 func (dp *Display) tx() {
 	select {
 	case msg := <-dp.connection.send:
-		if n, err := dp.connection.Write(msg); err != nil {
+		if n, err := dp.connection.Write(msg.payload); err != nil {
 			dp.connection.errs <- err
-		} else if n != len(msg) {
+		} else if n != int(msg.length) {
 			dp.connection.errs <- errors.New("Display.tx did not transmit full message")
 		}
 	case <-dp.connection.close:
@@ -103,8 +107,8 @@ func (dp *Display) rx() {
 		close(dp.connection.recv)
 	default:
 		var buff bytes.Buffer
-		if _, err := buff.ReadFrom(dp.connection); err != nil {
-
+		if n, err := buff.ReadFrom(dp.connection); err != nil {
+			dp.connection.recv <- message{length: n, payload: buff.Bytes()}
 		}
 	}
 }

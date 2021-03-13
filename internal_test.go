@@ -12,11 +12,11 @@ func TestInternal(t *testing.T) {
 		Output      *Display
 		Err         error
 	}{
-		{"No Input", "", &Display{"localhost", "unix", "0", "", nil, connection{}}, nil},
-		{"With Input", "void/unix:0.10", &Display{"void", "unix", "0", "10", nil, connection{}}, nil},
-		{"With only hostname as input", "localhost", &Display{"localhost", "unix", "0", "", nil, connection{}}, nil},
-		{"With bad hostname", "carbon", &Display{"localhost", "unix", "0", "", nil, connection{}}, nil},
-		{"With only colon", ":", &Display{"localhost", "unix", "0", "", nil, connection{}}, nil},
+		{"No Input", "", &Display{"localhost", "unix", "0", "", connection{}}, nil},
+		{"With Input", "void/unix:0.10", &Display{"void", "unix", "0", "10", connection{}}, nil},
+		{"With only hostname as input", "localhost", &Display{"localhost", "unix", "0", "", connection{}}, nil},
+		{"With bad hostname", "carbon", &Display{"localhost", "unix", "0", "", connection{}}, nil},
+		{"With only colon", ":", &Display{"localhost", "unix", "0", "", connection{}}, nil},
 	}
 
 	t.Run("Testing NewDisplay", func(t *testing.T) {

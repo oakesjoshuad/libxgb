@@ -1,4 +1,3 @@
-// Package libxgb ...
 package libxgb
 
 import (
@@ -7,8 +6,8 @@ import (
 )
 
 const (
-	xprotoversion  card16 = 11
-	xprotorevision card16 = 0
+	XProtocolVersion  card16 = 11
+	XProtocolRevision card16 = 0
 )
 
 var (
@@ -17,25 +16,12 @@ var (
 )
 
 type request interface {
-	Pack() request
+	pack() []byte
 }
 
-type response interface{}
-
-// connection setup
 type card8 uint8
 type card16 uint16
 type card32 uint32
-
-// ClientSetup ...
-type ClientSetup struct {
-	MajorVersion     card16
-	MinorVersion     card16
-	AuthProtoNameLen card16
-	AuthProtoDataLen card16
-	AuthProtoName    string
-	AuthProtoData    string
-}
 
 // pad pads data to align with 4 byte units
 func pad(expr interface{}) (padding []byte) {
@@ -51,23 +37,30 @@ func pad(expr interface{}) (padding []byte) {
 	return
 }
 
+// ClientSetup ...
+type ClientSetup struct {
+	MajorVersion     card16
+	MinorVersion     card16
+	AuthProtoNameLen card16
+	AuthProtoDataLen card16
+	AuthProtoName    string
+	AuthProtoData    string
+}
+
 // NewClientSetup ...
-// func NewClientSetup(host, display string) (cs *ClientSetup, err error) {
-// 	xa, err := xau.Xauth(host, display)
-// 	if err != nil {
-// 		return cs, err
-// 	}
-// 	cs.MajorVersion = xprotoversion
-// 	cs.MinorVersion = xprotorevision
-// 	cs.AuthProtoNameLen = card16(len(xa.protocol))
-// 	cs.AuthProtoName = xa.protocol
-// 	cs.AuthProtoDataLen = card16(len(xa.data))
-// 	cs.AuthProtoData = xa.data
-// 	return
-// }
+func NewClientSetup(authName, authData string) []byte {
+	var cs ClientSetup
+	cs.MajorVersion = XProtocolVersion
+	cs.MinorVersion = XProtocolRevision
+	cs.AuthProtoNameLen = card16(len(authName))
+	cs.AuthProtoName = authName
+	cs.AuthProtoDataLen = card16(len(authData))
+	cs.AuthProtoData = authData
+	return cs.pack()
+}
 
 // Pack ...
-func (cs *ClientSetup) Pack() []byte {
+func (cs *ClientSetup) pack() []byte {
 	var buf bytes.Buffer
 	pack(&buf, endianess, binary.BigEndian)
 	pack(&buf, endianess, pad(1))

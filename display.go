@@ -8,8 +8,6 @@ import (
 	"net"
 	"os"
 	"strings"
-
-	"github.com/oakesjoshuad/libxgb/xau"
 )
 
 // Display ...
@@ -18,22 +16,33 @@ type Display struct {
 
 	// encapsulating the connection to expose only needed functionality.
 	connection connection
-}
-
-type connection struct {
-	net.Conn
-	send  chan message
-	recv  chan message
+	// channels to buffer communication
+	send  chan Message
+	recv  chan Message
 	errs  chan error
 	close chan bool
 }
 
-type message struct {
+type connection struct {
+	net.Conn
+}
+
+// Message is the primary method of interacting with the Xserver through the display connection. It consists of the message payload in byte string form and the message length.
+type Message struct {
 	length  int64
 	payload []byte
 }
 
+// unixBase contains the file path of the unix "socket"
 const unixBase = "/tmp/.X11-unix/X"
+
+// Authorization types
+const (
+	// MIT authorization
+	MIT = "MIT-MAGIC-COOKIE-1"
+)
+
+var authNames = []string{MIT}
 
 var (
 	// ErrDisplayName ...
@@ -67,56 +76,58 @@ func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
 		err = dp.openUnix(ctx)
 	}
 	// recieve channel
-	dp.connection.recv = make(chan message)
+	dp.recv = make(chan Message)
 	// send channel
-	dp.connection.send = make(chan message)
+	dp.send = make(chan Message)
 	// sentinal channel to signal close
-	dp.connection.close = make(chan bool)
+	dp.close = make(chan bool)
 
 	go dp.tx()
 	go dp.rx()
 
-	// TODO:
-	xauth, err := xau.GetAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, xau.MIT)
-	if err != nil {
-		return err
-	}
-
 	return
 }
 
-// TODO: comment on tx and rx functions
-// TODO: write tests for this open and close
-// TODO: should I binary write, or just use the given write methods
+// Send puts a Message on the send channel
+func (dp *Display) Send(msg Message) {
+	dp.send <- msg
+}
 
-// Close ...
+// Recieve pulls a Message from the recv channel
+func (dp *Display) Recieve() Message {
+	return <-dp.recv
+}
+
+// Close sends close signal to all channels and closes the connection
 func (dp *Display) Close() error {
-	dp.connection.close <- true
-	close(dp.connection.close)
+	dp.close <- true
+	close(dp.close)
 	return dp.connection.Close()
 }
 
+// tx transmit Message to Xserver
 func (dp *Display) tx() {
 	select {
-	case msg := <-dp.connection.send:
+	case msg := <-dp.send:
 		if n, err := dp.connection.Write(msg.payload); err != nil {
-			dp.connection.errs <- err
+			dp.errs <- err
 		} else if n != int(msg.length) {
-			dp.connection.errs <- errors.New("Display.tx did not transmit full message")
+			dp.errs <- errors.New("Display.tx did not transmit full Message")
 		}
-	case <-dp.connection.close:
-		close(dp.connection.send)
+	case <-dp.close:
+		close(dp.send)
 	}
 }
 
+// rx recieve Message from Xserver
 func (dp *Display) rx() {
 	select {
-	case <-dp.connection.close:
-		close(dp.connection.recv)
+	case <-dp.close:
+		close(dp.recv)
 	default:
 		var buff bytes.Buffer
 		if n, err := buff.ReadFrom(dp.connection); err != nil {
-			dp.connection.recv <- message{length: n, payload: buff.Bytes()}
+			dp.recv <- Message{length: n, payload: buff.Bytes()}
 		}
 	}
 }

@@ -5,6 +5,7 @@ package xgbgen
 import (
 	"io"
 	"text/scanner"
+	"unicode"
 )
 
 // TODO: xgbgen will lex and parse header files and create a go equivalent, siloed into respective modules at libxgb base
@@ -47,4 +48,18 @@ func lex(input io.Reader, syn syntax) *lexer {
 
 func lexText(l *lexer) stateFn {
 	return nil
+}
+
+// isSpace reports whether r is a space character.
+func isSpace(r rune) bool {
+	switch r {
+	case ' ', '\t', '\n', '\r':
+		return true
+	}
+	return false
+}
+
+// isAlphaNumeric reports whether r is an alphabetic, digit, or underscore.
+func isAlphaNumeric(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 )
 
 type tokenType int
@@ -27,6 +28,7 @@ const (
 	tknSymbol
 	tknText
 	tknLeftComment
+	tknCommentText
 	tknRightComment
 )
 
@@ -39,8 +41,9 @@ var tokenMap = map[tokenType]string{
 	tknLiteral:      "Literal",
 	tknSymbol:       "Symbol",
 	tknText:         "Text",
-	tknLeftComment:  leftComment,
-	tknRightComment: rightComment,
+	tknLeftComment:  "Begin Comment",
+	tknCommentText:  "Text",
+	tknRightComment: "End Comment",
 }
 
 func (tkn *token) String() string {
@@ -56,11 +59,16 @@ type lexer struct {
 	scanner *bufio.Scanner
 	state   stateFn
 	tokens  chan token
+	words   []string
 }
 
 // scan ...
 func (l *lexer) scan() bool {
-	return l.scanner.Scan()
+	if l.scanner.Scan() {
+		l.words = strings.Split(l.text(), whitespace)
+		return true
+	}
+	return false
 }
 
 func (l *lexer) text() string {
@@ -75,7 +83,9 @@ func (l *lexer) emit(t tokenType, i interface{}) {
 			l.tokens <- token{t, strings.Join(i, whitespace)}
 		}
 	case string:
-		l.tokens <- token{t, i}
+		if isAlphaNumeric(i) {
+			l.tokens <- token{t, i}
+		}
 	}
 }
 
@@ -117,12 +127,13 @@ func lex(name string, rdr io.Reader) *lexer {
 		typedef:      lexTypedef,
 		structure:    lexStructure,
 		pd_if:        lexDirective,
-		pd_define:    lexDirective,
+		pd_define:    lexConstant,
 		pd_else:      lexDirective,
 		pd_endif:     lexDirective,
 	}
 
-	l.scanner.Split(bufio.ScanWords)
+	//l.scanner.Split(bufio.ScanWords)
+	l.scanner.Split(bufio.ScanLines)
 	return l
 }
 
@@ -140,18 +151,20 @@ const (
 	pd_endif  = "#endif"
 )
 
-const whitespace string = " "
-
 // lexText ...
 func lexText(l *lexer) stateFn {
 	var text []string
 	for l.scan() {
-		word := l.text()
-		if fn, ok := stateMap[word]; ok {
+		if fn, ok := stateMap[l.words[0]]; ok {
 			l.emit(tknText, text)
 			return fn
 		}
-		text = append(text, word)
+		// fringe case check, possible extraneous asterisks, etc... in comment format
+		if strings.HasPrefix(l.text(), leftComment) {
+			l.emit(tknText, text)
+			return lexLeftComment
+		}
+		text = append(text, l.text())
 	}
 	if l.err() != nil {
 		return l.errorf("Error lexing text, recieved: %s", l.err())
@@ -162,11 +175,25 @@ func lexText(l *lexer) stateFn {
 
 func lexLeftComment(l *lexer) stateFn {
 	l.emit(tknLeftComment, l.text())
-	return lexText
+	return lexComment
+}
+
+func lexComment(l *lexer) stateFn {
+	var text []string
+	for l.scan() {
+		input := l.text()
+		if strings.HasSuffix(input, rightComment) {
+			l.emit(tknCommentText, text)
+			return lexRightComment
+		}
+		text = append(text, input+newline)
+	}
+	return l.errorf("Error parsing, could not find the end of the comment. %s", l.err())
 }
 
 func lexRightComment(l *lexer) stateFn {
-	return l.errorf("Error lexing right comment:")
+	l.emit(tknRightComment, l.text())
+	return lexText
 }
 
 func lexTypedef(l *lexer) stateFn {
@@ -178,14 +205,53 @@ func lexStructure(l *lexer) stateFn {
 }
 
 func lexDirective(l *lexer) stateFn {
-	return l.errorf("Error lexing directive:")
+	return l.errorf("Error lexing directive, function not implemented")
 }
 
-// isSpace checks for a string containing whitespace, tab space, carriage return or newline
-func isSpace(input string) bool {
-	switch input {
-	case " ", "\t", "\r", "\n":
+func lexConstant(l *lexer) stateFn {
+	if len(l.words) == 3 {
+		l.emit(tknConstant, l.words[0])
+		l.words = l.words[1:]
+		return lexIdentifier
+	}
+	return lexText
+}
+
+func lexIdentifier(l *lexer) stateFn {
+	if len(l.words) > 1 {
+		l.emit(tknIdentifier, l.words[0])
+		l.words = l.words[1:]
+		return lexValue
+	}
+	return lexText
+}
+
+func lexValue(l *lexer) stateFn {
+	l.emit(tknLiteral, l.words)
+	return lexText
+}
+
+const (
+	whitespace     string = " "
+	newline        string = "\n"
+	tab            string = "\t"
+	carriagereturn string = "\r"
+)
+
+func isSpace(s string) bool {
+	switch s {
+	case whitespace, newline, tab, carriagereturn:
 		return true
 	}
 	return false
+}
+
+func isAlphaNumeric(s string) bool {
+	for _, r := range s {
+		// counter intuitively, check that the letters are not an underscore, unicode letter or unicode digit and return false
+		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
 }

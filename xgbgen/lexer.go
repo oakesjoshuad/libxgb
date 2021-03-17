@@ -3,6 +3,7 @@ package xgbgen
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -58,43 +59,25 @@ type lexer struct {
 	name    string
 	scanner *bufio.Scanner
 	state   stateFn
-	tokens  chan token
 	words   []string
+	tokens  chan token
 }
 
 // scan ...
 func (l *lexer) scan() bool {
-	if l.scanner.Scan() {
-		l.words = strings.Split(l.text(), whitespace)
-		return true
-	}
-	return false
+	return l.scanner.Scan()
 }
 
-func (l *lexer) text() string {
-	return l.scanner.Text()
-}
-
-// emit puts a token on the l.tokens channel
-func (l *lexer) emit(t tokenType, i interface{}) {
-	switch i := i.(type) {
-	case []string:
-		if len(i) > 0 {
-			l.tokens <- token{t, strings.Join(i, whitespace)}
-		}
-	case string:
-		if isAlphaNumeric(i) {
-			l.tokens <- token{t, i}
-		}
-	}
-}
-
-func (l *lexer) err() error {
+func (l *lexer) checkScanErr() error {
 	return l.scanner.Err()
 }
 
+func (l *lexer) emit(t tokenType, s string) {
+	l.tokens <- token{t, s}
+}
+
 func (l *lexer) errorf(format string, args ...interface{}) stateFn {
-	l.tokens <- token{Type: tknError, Literal: fmt.Sprintf(format, args...)}
+	l.tokens <- token{tknError, fmt.Sprintf(format, args...)}
 	return nil
 }
 
@@ -119,6 +102,7 @@ func lex(name string, rdr io.Reader) *lexer {
 		state:   lexText,
 		tokens:  make(chan token, 2),
 	}
+	l.scanner.Split(bufio.ScanLines)
 
 	// initialize the state map
 	stateMap = map[string]stateFn{
@@ -132,17 +116,20 @@ func lex(name string, rdr io.Reader) *lexer {
 		pd_endif:     lexDirective,
 	}
 
-	//l.scanner.Split(bufio.ScanWords)
-	l.scanner.Split(bufio.ScanLines)
 	return l
 }
 
 const (
-	// keywords
+	// symbols
+	leftBrace    = "{"
+	rightBrace   = "}"
+	leftBracket  = "["
+	rightBracket = "]"
 	leftComment  = "/*"
 	rightComment = "*/"
-	typedef      = "typedef"
-	structure    = "struct"
+	// keywords
+	typedef   = "typedef"
+	structure = "struct"
 
 	// preprocessor directives; ugly naming convention
 	pd_if     = "#if"
@@ -153,47 +140,42 @@ const (
 
 // lexText ...
 func lexText(l *lexer) stateFn {
-	var text []string
+	buf := new(bytes.Buffer)
 	for l.scan() {
-		if fn, ok := stateMap[l.words[0]]; ok {
-			l.emit(tknText, text)
+		// check for a scan error
+		if err := l.checkScanErr(); err != nil {
+			l.errorf("encountered an error while scanning text: %s", err)
+		}
+		// split the scanned text into a slice of words
+		words := strings.Split(l.scanner.Text(), " ")
+		// if the first word is a keyword, emit a non-empty buffer as text and return the appropriate stateFn
+		if fn, ok := stateMap[words[0]]; ok {
+			if buf.Len() > 0 {
+				l.emit(tknText, buf.String())
+			}
+			// retain split input for the following states, sans keyword
+			l.words = words[1:]
 			return fn
 		}
-		// fringe case check, possible extraneous asterisks, etc... in comment format
-		if strings.HasPrefix(l.text(), leftComment) {
-			l.emit(tknText, text)
-			return lexLeftComment
-		}
-		text = append(text, l.text())
+		// write the original text into the local buffer preserving formatting
+		buf.WriteString(l.scanner.Text())
 	}
-	if l.err() != nil {
-		return l.errorf("Error lexing text, recieved: %s", l.err())
-	}
+	// we have reached the end of the line
 	l.emit(tknEOF, tokenMap[tknEOF])
 	return nil
 }
 
 func lexLeftComment(l *lexer) stateFn {
-	l.emit(tknLeftComment, l.text())
+	l.emit(tknLeftComment, leftComment)
 	return lexComment
 }
 
 func lexComment(l *lexer) stateFn {
-	var text []string
-	for l.scan() {
-		input := l.text()
-		if strings.HasSuffix(input, rightComment) {
-			l.emit(tknCommentText, text)
-			return lexRightComment
-		}
-		text = append(text, input+newline)
-	}
-	return l.errorf("Error parsing, could not find the end of the comment. %s", l.err())
+	return l.errorf("Not Implemented")
 }
 
 func lexRightComment(l *lexer) stateFn {
-	l.emit(tknRightComment, l.text())
-	return lexText
+	return l.errorf("Not Implemented")
 }
 
 func lexTypedef(l *lexer) stateFn {
@@ -209,49 +191,32 @@ func lexDirective(l *lexer) stateFn {
 }
 
 func lexConstant(l *lexer) stateFn {
-	if len(l.words) == 3 {
-		l.emit(tknConstant, l.words[0])
-		l.words = l.words[1:]
-		return lexIdentifier
-	}
-	return lexText
+	return l.errorf("Not Implemented")
 }
 
 func lexIdentifier(l *lexer) stateFn {
-	if len(l.words) > 1 {
-		l.emit(tknIdentifier, l.words[0])
-		l.words = l.words[1:]
-		return lexValue
-	}
-	return lexText
+	return l.errorf("Not Implemented")
 }
 
 func lexValue(l *lexer) stateFn {
-	l.emit(tknLiteral, l.words)
-	return lexText
+	return l.errorf("Not Implemented")
 }
 
 const (
-	whitespace     string = " "
-	newline        string = "\n"
-	tab            string = "\t"
-	carriagereturn string = "\r"
+	whitespace     = ' '
+	newline        = '\n'
+	tab            = '\t'
+	carriagereturn = '\r'
 )
 
-func isSpace(s string) bool {
-	switch s {
+func isSpace(r rune) bool {
+	switch r {
 	case whitespace, newline, tab, carriagereturn:
 		return true
 	}
 	return false
 }
 
-func isAlphaNumeric(s string) bool {
-	for _, r := range s {
-		// counter intuitively, check that the letters are not an underscore, unicode letter or unicode digit and return false
-		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-			return false
-		}
-	}
-	return true
+func isAlphaNumeric(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }

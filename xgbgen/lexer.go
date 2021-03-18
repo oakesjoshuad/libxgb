@@ -3,7 +3,6 @@ package xgbgen
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -59,7 +58,7 @@ type lexer struct {
 	name    string
 	scanner *bufio.Scanner
 	state   stateFn
-	words   []string
+	text    string
 	tokens  chan token
 }
 
@@ -92,8 +91,6 @@ func (l *lexer) nextToken() token {
 	}
 }
 
-var stateMap map[string]stateFn
-
 // lex returns a new lexer, given an io.Reader
 func lex(name string, rdr io.Reader) *lexer {
 	l := &lexer{
@@ -103,19 +100,6 @@ func lex(name string, rdr io.Reader) *lexer {
 		tokens:  make(chan token, 2),
 	}
 	l.scanner.Split(bufio.ScanLines)
-
-	// initialize the state map
-	stateMap = map[string]stateFn{
-		leftComment:  lexLeftComment,
-		rightComment: lexRightComment,
-		typedef:      lexTypedef,
-		structure:    lexStructure,
-		pd_if:        lexDirective,
-		pd_define:    lexConstant,
-		pd_else:      lexDirective,
-		pd_endif:     lexDirective,
-	}
-
 	return l
 }
 
@@ -127,55 +111,58 @@ const (
 	rightBracket = "]"
 	leftComment  = "/*"
 	rightComment = "*/"
-	// keywords
-	typedef   = "typedef"
-	structure = "struct"
-
-	// preprocessor directives; ugly naming convention
-	pd_if     = "#if"
-	pd_define = "#define"
-	pd_else   = "#else"
-	pd_endif  = "#endif"
+	directive    = "#"
 )
 
 // lexText ...
 func lexText(l *lexer) stateFn {
-	buf := new(bytes.Buffer)
-	for l.scan() {
-		// check for a scan error
-		if err := l.checkScanErr(); err != nil {
-			l.errorf("encountered an error while scanning text: %s", err)
+	for txt := ""; l.scan(); l.text = txt {
+		if strings.HasPrefix(l.scanner.Text(), leftComment) {
+			l.text = strings.TrimPrefix(l.scanner.Text(), leftComment)
+			l.emit(tknText, txt)
+			return lexLeftComment
 		}
-		// split the scanned text into a slice of words
-		words := strings.Split(l.scanner.Text(), " ")
-		// if the first word is a keyword, emit a non-empty buffer as text and return the appropriate stateFn
-		if fn, ok := stateMap[words[0]]; ok {
-			if buf.Len() > 0 {
-				l.emit(tknText, buf.String())
-			}
-			// retain split input for the following states, sans keyword
-			l.words = words[1:]
-			return fn
+		if strings.HasPrefix(l.scanner.Text(), directive) {
+			l.text = strings.TrimPrefix(l.scanner.Text(), directive)
+			l.emit(tknText, txt)
+			return lexDirective
 		}
-		// write the original text into the local buffer preserving formatting
-		buf.WriteString(l.scanner.Text())
+		txt += l.scanner.Text()
 	}
+	// check for a scan error
+	if err := l.checkScanErr(); err != nil {
+		l.errorf("encountered an error while scanning text: %s", err)
+	}
+
 	// we have reached the end of the line
-	l.emit(tknEOF, tokenMap[tknEOF])
+	l.emit(tknEOF, l.text)
 	return nil
 }
 
 func lexLeftComment(l *lexer) stateFn {
 	l.emit(tknLeftComment, leftComment)
-	return lexComment
+	return lexInsideComment
 }
 
-func lexComment(l *lexer) stateFn {
-	return l.errorf("Not Implemented")
+func lexInsideComment(l *lexer) stateFn {
+	for txt := l.text; !strings.HasSuffix(txt, rightComment); l.text = txt {
+		if l.scan() {
+			txt = fmt.Sprintf("%s\n%s", txt, l.scanner.Text())
+		} else if l.scanner.Err() != nil {
+			l.errorf("encountered an error while scanning inside comment: %s", l.scanner.Err())
+		} else {
+			l.errorf("encountered end of file before comment termination")
+		}
+
+	}
+	txt := strings.TrimSuffix(l.text, rightComment)
+	l.emit(tknCommentText, txt)
+	return lexRightComment
 }
 
 func lexRightComment(l *lexer) stateFn {
-	return l.errorf("Not Implemented")
+	l.emit(tknRightComment, rightComment)
+	return lexText
 }
 
 func lexTypedef(l *lexer) stateFn {

@@ -22,6 +22,7 @@ const (
 	tknError tokenType = iota
 	tknEOF
 	tknKeyword
+	tknDirective
 	tknIdentifier
 	tknConstant
 	tknLiteral
@@ -30,20 +31,23 @@ const (
 	tknLeftComment
 	tknCommentText
 	tknRightComment
+	tknInlineComment
 )
 
 var tokenMap = map[tokenType]string{
-	tknError:        "Error",
-	tknEOF:          "EOF",
-	tknKeyword:      "Keyword",
-	tknIdentifier:   "Identifier",
-	tknConstant:     "Constant",
-	tknLiteral:      "Literal",
-	tknSymbol:       "Symbol",
-	tknText:         "Text",
-	tknLeftComment:  "Begin Comment",
-	tknCommentText:  "Text",
-	tknRightComment: "End Comment",
+	tknError:         "Error",
+	tknEOF:           "EOF",
+	tknKeyword:       "Keyword",
+	tknDirective:     "Directive",
+	tknIdentifier:    "Identifier",
+	tknConstant:      "Constant",
+	tknLiteral:       "Literal",
+	tknSymbol:        "Symbol",
+	tknText:          "Text",
+	tknLeftComment:   "Begin Comment",
+	tknCommentText:   "Text",
+	tknRightComment:  "End Comment",
+	tknInlineComment: "Inline Comment",
 }
 
 func (tkn *token) String() string {
@@ -72,7 +76,9 @@ func (l *lexer) checkScanErr() error {
 }
 
 func (l *lexer) emit(t tokenType, s string) {
-	l.tokens <- token{t, s}
+	if !isEmpty(s) {
+		l.tokens <- token{t, s}
+	}
 }
 
 func (l *lexer) errorf(format string, args ...interface{}) stateFn {
@@ -105,13 +111,19 @@ func lex(name string, rdr io.Reader) *lexer {
 
 const (
 	// symbols
-	leftBrace    = "{"
-	rightBrace   = "}"
-	leftBracket  = "["
-	rightBracket = "]"
-	leftComment  = "/*"
-	rightComment = "*/"
-	directive    = "#"
+	leftBrace     = "{"
+	rightBrace    = "}"
+	leftBracket   = "["
+	rightBracket  = "]"
+	leftComment   = "/*"
+	rightComment  = "*/"
+	inlineComment = "//"
+	directive     = "#"
+	semicolon     = ";"
+
+	// keywords
+	cStruct  = "struct"
+	cTypedef = "typedef"
 )
 
 // lexText ...
@@ -123,9 +135,12 @@ func lexText(l *lexer) stateFn {
 			return lexLeftComment
 		}
 		if strings.HasPrefix(l.scanner.Text(), directive) {
-			l.text = strings.TrimPrefix(l.scanner.Text(), directive)
 			l.emit(tknText, txt)
 			return lexDirective
+		}
+		if strings.HasPrefix(l.scanner.Text(), cTypedef) {
+			l.emit(tknText, txt)
+			return lexCTypedef
 		}
 		txt += l.scanner.Text()
 	}
@@ -165,28 +180,63 @@ func lexRightComment(l *lexer) stateFn {
 	return lexText
 }
 
-func lexTypedef(l *lexer) stateFn {
-	return l.errorf("Error lexing typedef:")
+func lexCTypedef(l *lexer) stateFn {
+	if 
 }
 
 func lexStructure(l *lexer) stateFn {
 	return l.errorf("Error lexing struct:")
 }
 
+const (
+	// directives
+	define = "#define"
+)
+
 func lexDirective(l *lexer) stateFn {
-	return l.errorf("Error lexing directive, function not implemented")
+	if strings.HasPrefix(l.scanner.Text(), define) {
+		return lexConstant
+	}
+	return lexText
 }
 
 func lexConstant(l *lexer) stateFn {
-	return l.errorf("Not Implemented")
+	if strings.HasPrefix(l.scanner.Text(), define) {
+		if len(strings.Fields(l.scanner.Text())) < 3 {
+			return lexText
+		}
+		l.text = strings.TrimPrefix(l.scanner.Text(), define)
+		l.emit(tknDirective, define)
+		return lexIdentifier
+	}
+	return lexText
 }
 
 func lexIdentifier(l *lexer) stateFn {
-	return l.errorf("Not Implemented")
+	tkns := strings.Fields(l.text)
+	if !isWord(tkns[0]) {
+		l.errorf("error: invalid identifier: %s", tkns[0])
+	}
+	l.emit(tknIdentifier, tkns[0])
+	l.text = strings.Join(tkns[1:], " ")
+	return lexLiteral
 }
 
-func lexValue(l *lexer) stateFn {
-	return l.errorf("Not Implemented")
+func lexLiteral(l *lexer) stateFn {
+	tkns := strings.Fields(l.text)
+	if isNumber(tkns[0]) || isWord(tkns[0]) {
+		l.emit(tknLiteral, tkns[0])
+	}
+	l.text = strings.Join(tkns[1:], " ")
+	if strings.HasPrefix(l.text, leftComment) || strings.HasPrefix(l.text, inlineComment) {
+		return lexInlineComment
+	}
+	return lexText
+}
+
+func lexInlineComment(l *lexer) stateFn {
+	l.emit(tknInlineComment, l.text)
+	return lexText
 }
 
 const (
@@ -195,6 +245,33 @@ const (
 	tab            = '\t'
 	carriagereturn = '\r'
 )
+
+func isNumber(s string) bool {
+	for _, r := range s {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isWord(s string) bool {
+	for _, r := range s {
+		if !isAlphaNumeric(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func isEmpty(s string) bool {
+	for _, r := range s {
+		if !isSpace(r) {
+			return false
+		}
+	}
+	return true
+}
 
 func isSpace(r rune) bool {
 	switch r {

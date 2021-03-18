@@ -60,6 +60,29 @@ SOFTWARE.
 #define KeySym CARD32
 
 #define X_TCP_PORT 6000     /* add display number */
+
+#define xTrue        1
+#define xFalse       0
+
+
+typedef CARD16 KeyButMask;
+
+/*****************
+   Connection setup structures.  See Chapter 8: Connection Setup
+   of the X Window System Protocol specification for details.
+*****************/
+
+/* Client initiates handshake with this data, followed by the strings
+ * for the auth protocol & data.
+ */
+typedef struct {
+    CARD8	byteOrder;
+    BYTE	pad;
+    CARD16	majorVersion, minorVersion;
+    CARD16	nbytesAuthProto;	/* Authorization protocol */
+    CARD16	nbytesAuthString;	/* Authorization string */
+    CARD16	pad2;
+} xConnClientPrefix;
 `
 
 func TestLexer(t *testing.T) {

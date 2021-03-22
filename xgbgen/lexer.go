@@ -69,6 +69,7 @@ type lexer struct {
 
 // scan ...
 func (l *lexer) scan() bool {
+	l.linepos = 0
 	return l.scanner.Scan()
 }
 
@@ -107,7 +108,6 @@ func lex(name string, rdr io.Reader) *lexer {
 		name:    name,
 		scanner: bufio.NewScanner(rdr),
 		state:   lexText,
-		linepos: 0,
 		tokens:  make(chan token, 2),
 	}
 	l.scanner.Split(bufio.ScanLines)
@@ -115,7 +115,7 @@ func lex(name string, rdr io.Reader) *lexer {
 	key = map[string]stateFn{
 		cStruct:  lexCStruct,
 		cTypedef: lexCTypedef,
-		cDefine:  lexCDirective,
+		cDefine:  lexCDefine,
 	}
 
 	return l
@@ -186,7 +186,7 @@ func lexLeftComment(l *lexer) stateFn {
 // lexInsideComment ...
 func lexInsideComment(l *lexer) stateFn {
 	var txt string
-	for txt = strings.TrimPrefix(l.scanner.Text(), leftComment); l.scan(); txt += l.scanner.Text() {
+	for txt = strings.TrimPrefix(l.scanner.Text(), leftComment); l.scan(); txt += l.scanner.Text() + "\n" {
 		if strings.HasSuffix(l.scanner.Text(), rightComment) {
 			txt += strings.TrimSuffix(l.scanner.Text(), rightComment)
 			l.emit(tknCommentText, txt)
@@ -213,8 +213,12 @@ func lexInlineComment(l *lexer) stateFn {
 }
 
 // lexCDirective ...
-func lexCDirective(l *lexer) stateFn {
-	return l.errorf("lexCDirective Not Implemented")
+func lexCDefine(l *lexer) stateFn {
+	if l.linepos = strings.LastIndex(l.scanner.Text(), cDefine); l.linepos > 0 {
+		l.emit(tknDirective, cDefine)
+		return lexIdentifier
+	}
+	return lexText
 }
 
 // lexCTypedef ...
@@ -236,11 +240,18 @@ func lexConstant(l *lexer) stateFn {
 	return l.errorf("lexConstant Not Implemented")
 }
 func lexIdentifier(l *lexer) stateFn {
-	return l.errorf("lexIdentifier Not Implemented")
+	text := l.scanner.Text()[l.linepos:]
+	if ident := strings.Fields(text)[0]; isWord(ident) {
+		l.emit(tknIdentifier, ident)
+		l.linepos = strings.LastIndex(text, ident)
+		return lexLiteral
+	}
+	return lexText
 }
 
 func lexLiteral(l *lexer) stateFn {
-	return l.errorf("lexLiteral Not Implemented")
+	text := l.scanner.Text()[l.linepos:]
+	return lexText
 }
 
 const (

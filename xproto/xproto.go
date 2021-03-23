@@ -1,4 +1,4 @@
-package libxgb
+package xproto
 
 import (
 	"bytes"

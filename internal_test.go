@@ -3,6 +3,9 @@ package libxgb
 import (
 	"reflect"
 	"testing"
+
+	"github.com/oakesjoshuad/libxgb/xau"
+	"github.com/oakesjoshuad/libxgb/xproto"
 )
 
 func TestInternal(t *testing.T) {
@@ -12,7 +15,7 @@ func TestInternal(t *testing.T) {
 		Output      *Display
 		Err         error
 	}{
-		{"No Input", "", &Display{Host: "localhost", Protocol: "unix", Number: "0", Screen: ""}, nil},
+		{"No Input", "", &Display{Host: "void", Protocol: "unix", Number: "0", Screen: ""}, nil},
 		{"With Input", "void/unix:0.10", &Display{Host: "void", Protocol: "unix", Number: "0", Screen: "10"}, nil},
 		{"With only hostname as input", "localhost", &Display{Host: "localhost", Protocol: "unix", Number: "0", Screen: ""}, nil},
 		{"With bad hostname", "carbon", &Display{Host: "localhost", Protocol: "unix", Number: "0", Screen: ""}, nil},
@@ -40,7 +43,15 @@ func TestInternal(t *testing.T) {
 		if err := dp.Open(); err != nil {
 			t.Error(err)
 		} else {
-			t.Log(dp.connection.RemoteAddr())
+		}
+		if xa, err := xau.GetAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, MIT); err != nil {
+			t.Log(err)
+		} else {
+			cs := xproto.NewClientSetup(xa.AuthName, xa.AuthData)
+			dp.Send(Message{len(cs), cs})
+		}
+		if msg := dp.CheckMessage(); msg.Length != 0 {
+			t.Log(string(msg.Payload))
 		}
 		if err := dp.Close(); err != nil {
 			t.Error(err)

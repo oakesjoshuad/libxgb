@@ -3,9 +3,6 @@ package libxgb
 import (
 	"reflect"
 	"testing"
-
-	"github.com/oakesjoshuad/libxgb/xau"
-	"github.com/oakesjoshuad/libxgb/xproto"
 )
 
 func TestInternal(t *testing.T) {
@@ -42,16 +39,6 @@ func TestInternal(t *testing.T) {
 		}
 		if err := dp.Open(); err != nil {
 			t.Error(err)
-		} else {
-		}
-		if xa, err := xau.GetAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, MIT); err != nil {
-			t.Log(err)
-		} else {
-			cs := xproto.NewClientSetup(xa.AuthName, xa.AuthData)
-			dp.Send(Message{len(cs), cs})
-		}
-		if msg := dp.CheckMessage(); msg.Length != 0 {
-			t.Log(string(msg.Payload))
 		}
 		if err := dp.Close(); err != nil {
 			t.Error(err)

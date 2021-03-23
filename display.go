@@ -3,11 +3,15 @@ package libxgb
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"strings"
+
+	"github.com/oakesjoshuad/libxgb/xau"
+	"github.com/oakesjoshuad/libxgb/xproto"
 )
 
 // Display ...
@@ -75,6 +79,21 @@ func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
 	} else {
 		err = dp.openUnix(ctx)
 	}
+
+	// send client prefix to Xserver, authorizing and establishing communication
+	xauth, err := xau.GetBestAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, []string{MIT})
+	if err != nil {
+		return err
+	}
+	clientPrefix := xproto.NewClientPrefix(xauth.AuthName, xauth.AuthData)
+	if err = binary.Write(dp.connection, xproto.LSB, clientPrefix); err != nil {
+		return
+	}
+	var setupPrefix xproto.SetupPrefix
+	if err = binary.Read(dp.connection, xproto.LSB, &setupPrefix); err != nil {
+		return
+	}
+
 	// recieve channel
 	dp.recv = make(chan Message)
 	// send channel
@@ -84,8 +103,8 @@ func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
 	// sentinal channel to signal close
 	dp.close = make(chan bool)
 
-	go dp.rxtx()
-	go dp.err()
+	//go dp.rxtx()
+	//go dp.err()
 
 	return
 }
@@ -93,14 +112,6 @@ func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
 // Send puts a Message on the send channel
 func (dp *Display) Send(msg Message) {
 	dp.send <- msg
-}
-
-// Recieve pulls a Message from the recv channel
-func (dp *Display) CheckMessage() Message {
-	if msg := <-dp.recv; msg.Length != 0 {
-		return msg
-	}
-	return Message{}
 }
 
 // Close sends close signal to all channels and closes the connection
@@ -141,10 +152,12 @@ func (dp *Display) err() {
 	}
 }
 
+// openTCP ...
 func (dp *Display) openTCP(pctx context.Context) (err error) {
 	return errors.New("openTCP function not implemented")
 }
 
+// openUnix ...
 func (dp *Display) openUnix(pctx context.Context) error {
 	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()

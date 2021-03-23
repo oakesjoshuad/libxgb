@@ -1,7 +1,6 @@
 package xproto
 
 import (
-	"bytes"
 	"encoding/binary"
 )
 
@@ -11,13 +10,9 @@ const (
 )
 
 var (
-	pack      = binary.Write
-	endianess = binary.BigEndian
+	pack = binary.Write
+	LSB  = binary.LittleEndian
 )
-
-type request interface {
-	pack() []byte
-}
 
 type card8 uint8
 type card16 uint16
@@ -38,40 +33,35 @@ func pad(expr interface{}) (padding []byte) {
 }
 
 // ClientSetup ...
-type ClientSetup struct {
+type ClientPrefix struct {
 	MajorVersion     card16
 	MinorVersion     card16
+	_                byte
 	AuthProtoNameLen card16
 	AuthProtoDataLen card16
-	AuthProtoName    string
-	AuthProtoData    string
+	_                card16
+	AuthProtoName    *[]byte
+	AuthProtoData    *[]byte
 }
 
 // NewClientSetup ...
-func NewClientSetup(authName, authData string) []byte {
-	var cs ClientSetup
+func NewClientPrefix(authName, authData string) ClientPrefix {
+	pAuthName := pad(authName)
+	pAuthData := pad(authData)
+	var cs ClientPrefix
 	cs.MajorVersion = XProtocolVersion
 	cs.MinorVersion = XProtocolRevision
-	cs.AuthProtoNameLen = card16(len(authName))
-	cs.AuthProtoName = authName
-	cs.AuthProtoDataLen = card16(len(authData))
-	cs.AuthProtoData = authData
-	return cs.pack()
+	cs.AuthProtoNameLen = card16(len(pAuthName))
+	cs.AuthProtoName = &pAuthName
+	cs.AuthProtoDataLen = card16(len(pAuthData))
+	cs.AuthProtoData = &pAuthData
+	return cs
 }
 
-// Pack ...
-func (cs *ClientSetup) pack() []byte {
-	var buf bytes.Buffer
-	pack(&buf, endianess, binary.BigEndian)
-	pack(&buf, endianess, pad(1))
-	pack(&buf, endianess, cs.MajorVersion)
-	pack(&buf, endianess, cs.MinorVersion)
-	pack(&buf, endianess, cs.AuthProtoNameLen)
-	pack(&buf, endianess, cs.AuthProtoDataLen)
-	pack(&buf, endianess, pad(2))
-	pack(&buf, endianess, cs.AuthProtoName)
-	pack(&buf, endianess, pad(cs.AuthProtoName))
-	pack(&buf, endianess, cs.AuthProtoName)
-	pack(&buf, endianess, pad(cs.AuthProtoData))
-	return buf.Bytes()
+type SetupPrefix struct {
+	Success      card8
+	ReasonLen    byte
+	MajorVersion card16
+	MinorVersion card16
+	AddBytesLen  card16
 }

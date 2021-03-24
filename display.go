@@ -3,7 +3,6 @@ package libxgb
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -17,9 +16,9 @@ import (
 // Display ...
 type Display struct {
 	Host, Protocol, Number, Screen string
-
 	// encapsulating the connection to expose only needed functionality.
 	connection connection
+	ctx        context.Context
 	// channels to buffer communication
 	send  chan Message
 	recv  chan Message
@@ -66,47 +65,53 @@ func (dp *Display) unixAddress() string {
 
 // Open ...
 func (dp *Display) Open() error {
-	ctx := context.Background()
-	return dp.OpenWithContext(ctx)
-}
-
-// OpenWithContext ...
-func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
-	ctx, cancel := context.WithCancel(pctx)
-	defer cancel()
+	dp.ctx = context.TODO()
+	defer dp.ctx.Done()
 	if dp.Protocol != "unix" {
-		err = dp.openTCP(ctx)
+		if err := dp.openTCP(dp.ctx); err != nil {
+			return err
+		}
 	} else {
-		err = dp.openUnix(ctx)
+		if err := dp.openUnix(dp.ctx); err != nil {
+			return err
+		}
 	}
 
 	// send client prefix to Xserver, authorizing and establishing communication
-	xauth, err := xau.GetBestAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, []string{MIT})
+	xauth, err := xau.GetAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, MIT)
 	if err != nil {
-		return err
+		return fmt.Errorf("xauth error: %w", err)
 	}
-	clientPrefix := xproto.NewClientPrefix(xauth.AuthName, xauth.AuthData)
-	if err = binary.Write(dp.connection, xproto.LSB, clientPrefix); err != nil {
-		return
+	clientPrefix, err := xproto.NewClientPrefix(xauth.AuthName, xauth.AuthData)
+	if err != nil {
+		return fmt.Errorf("clientPrefix error: %w", err)
 	}
-	var setupPrefix xproto.SetupPrefix
-	if err = binary.Read(dp.connection, xproto.LSB, &setupPrefix); err != nil {
-		return
+
+	if n, err := dp.connection.Write(clientPrefix); err != nil {
+		return fmt.Errorf("Error writing clientPrefix to connection: %w", err)
+	} else if n < len(clientPrefix) {
+		return fmt.Errorf("Error writing clientPrefix, %d bytes, wrote %d bytes", len(clientPrefix), n)
+	}
+	response := make([]byte, 8)
+	if n, err := dp.connection.Read(response); err != nil {
+		return fmt.Errorf("Error reading from connection: %w", err)
+	} else if n < 8 {
+		return fmt.Errorf("Error reading from connection, expected 8 bytes, recieved %d", n)
 	}
 
 	// recieve channel
-	dp.recv = make(chan Message)
+	//dp.recv = make(chan Message)
 	// send channel
-	dp.send = make(chan Message)
+	//dp.send = make(chan Message)
 	// error channel
-	dp.errs = make(chan error)
+	//dp.errs = make(chan error)
 	// sentinal channel to signal close
-	dp.close = make(chan bool)
+	//dp.close = make(chan bool)
 
 	//go dp.rxtx()
 	//go dp.err()
 
-	return
+	return nil
 }
 
 // Send puts a Message on the send channel
@@ -133,6 +138,7 @@ func (dp *Display) rxtx() {
 	case <-dp.close:
 		close(dp.send)
 		close(dp.recv)
+		close(dp.errs)
 	default:
 		var buff bytes.Buffer
 		if n, err := buff.ReadFrom(dp.connection); err != nil {

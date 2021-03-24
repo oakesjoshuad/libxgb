@@ -1,33 +1,41 @@
 package libxgb
 
 import (
+	"os"
 	"reflect"
 	"testing"
 )
 
 func TestInternal(t *testing.T) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	cases := []struct {
 		Description string
 		Input       string
 		Output      *Display
 		Err         error
 	}{
-		{"No Input", "", &Display{Host: "void", Protocol: "unix", Number: "0", Screen: ""}, nil},
+		{"No Input", "", &Display{Host: hostname, Protocol: "unix", Number: "0", Screen: ""}, nil},
 		{"With Input", "void/unix:0.10", &Display{Host: "void", Protocol: "unix", Number: "0", Screen: "10"}, nil},
-		{"With only hostname as input", "localhost", &Display{Host: "localhost", Protocol: "unix", Number: "0", Screen: ""}, nil},
-		{"With bad hostname", "carbon", &Display{Host: "localhost", Protocol: "unix", Number: "0", Screen: ""}, nil},
-		{"With only colon", ":", &Display{Host: "localhost", Protocol: "unix", Number: "0", Screen: ""}, nil},
+		{"With only hostname as input", hostname, &Display{Host: hostname, Protocol: "unix", Number: "0", Screen: ""}, nil},
+		{"With bad hostname", "carbon", &Display{Host: hostname, Protocol: "unix", Number: "0", Screen: ""}, nil},
+		{"With only colon", ":", &Display{Host: hostname, Protocol: "unix", Number: "0", Screen: ""}, nil},
 	}
 
 	t.Run("Testing NewDisplay", func(t *testing.T) {
 		for _, test := range cases {
 			t.Run(test.Description, func(t *testing.T) {
 				dp, err := NewDisplay(test.Input)
-				if !reflect.DeepEqual(dp, test.Output) || err != nil {
+				if err != nil {
 					t.Error(err)
 				}
-				t.Log("Expected: ", test.Output)
-				t.Log("Recieved: ", dp)
+				if !reflect.DeepEqual(dp, test.Output) {
+					t.Log("Expected: ", test.Output)
+					t.Log("Recieved: ", dp)
+				}
 			})
 		}
 	})
@@ -38,10 +46,10 @@ func TestInternal(t *testing.T) {
 			t.Error(err)
 		}
 		if err := dp.Open(); err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 		if err := dp.Close(); err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 	})
 }

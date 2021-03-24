@@ -1,12 +1,15 @@
 package xproto
 
 import (
+	"bytes"
 	"encoding/binary"
+	"errors"
+	"fmt"
 )
 
 const (
-	XProtocolVersion  card16 = 11
-	XProtocolRevision card16 = 0
+	XProtocolVersion  Card16 = 11
+	XProtocolRevision Card16 = 0
 )
 
 var (
@@ -14,54 +17,60 @@ var (
 	LSB  = binary.LittleEndian
 )
 
-type card8 uint8
-type card16 uint16
-type card32 uint32
+type Card8 uint8
+type Card16 uint16
+type Card32 uint32
 
 // pad pads data to align with 4 byte units
-func pad(expr interface{}) (padding []byte) {
-	switch v := expr.(type) {
-	case int:
-		padding = make([]byte, v)
-	case card16:
-	case card32:
-		padding = make([]byte, (4-(uint(v)%4))%4)
-	case string:
-		padding = make([]byte, (4-(uint(len(v))))%4)
-	}
-	return
+func pad(data string) []byte {
+	padding := make([]byte, (4-(uint(len(data))))%4)
+	copy(padding, []byte(data))
+	return padding
 }
 
 // ClientSetup ...
 type ClientPrefix struct {
-	MajorVersion     card16
-	MinorVersion     card16
+	MajorVersion     Card16
+	MinorVersion     Card16
 	_                byte
-	AuthProtoNameLen card16
-	AuthProtoDataLen card16
-	_                card16
-	AuthProtoName    *[]byte
-	AuthProtoData    *[]byte
+	AuthProtoNameLen Card16
+	AuthProtoDataLen Card16
+	_                Card16
 }
 
 // NewClientSetup ...
-func NewClientPrefix(authName, authData string) ClientPrefix {
+func NewClientPrefix(authName, authData string) ([]byte, error) {
 	pAuthName := pad(authName)
 	pAuthData := pad(authData)
-	var cs ClientPrefix
+	cs := new(ClientPrefix)
 	cs.MajorVersion = XProtocolVersion
 	cs.MinorVersion = XProtocolRevision
-	cs.AuthProtoNameLen = card16(len(pAuthName))
-	cs.AuthProtoName = &pAuthName
-	cs.AuthProtoDataLen = card16(len(pAuthData))
-	cs.AuthProtoData = &pAuthData
-	return cs
+	cs.AuthProtoNameLen = Card16(len(pAuthName))
+	cs.AuthProtoDataLen = Card16(len(pAuthData))
+
+	buff := new(bytes.Buffer)
+	if err := binary.Write(buff, LSB, cs); err != nil {
+		return []byte{}, fmt.Errorf("Error writing client prefix to buffer: %w", err)
+	}
+	fmt.Println(buff.Bytes())
+	if n, err := buff.Write(pAuthName); err != nil {
+		return []byte{}, fmt.Errorf("Error writing AuthName to buffer: %w", err)
+	} else if n < len(pAuthName) {
+		return []byte{}, errors.New("Error writing AuthName to buffer")
+	}
+	if n, err := buff.Write(pAuthData); err != nil {
+		return buff.Bytes(), fmt.Errorf("Error writing AuthData to buffer: %w", err)
+	} else if n < len(pAuthData) {
+		return []byte{}, errors.New("Error writing AuthData to buffer")
+	}
+
+	return buff.Bytes(), nil
 }
 
 type SetupPrefix struct {
-	Success      card8
+	Success      Card8
 	ReasonLen    byte
-	MajorVersion card16
-	MinorVersion card16
-	AddBytesLen  card16
+	MajorVersion Card16
+	MinorVersion Card16
+	AddBytesLen  Card16
 }

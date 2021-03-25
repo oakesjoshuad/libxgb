@@ -94,7 +94,6 @@ func (dp *Display) Open() error {
 	if err := binary.Read(dp.connection, binary.LittleEndian, spfx); err != nil {
 		return fmt.Errorf("error reading setup prefix from connection: %w", err)
 	}
-	fmt.Println(spfx)
 	// recieve channel
 	//dp.recv = make(chan Message)
 	// send channel

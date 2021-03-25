@@ -3,6 +3,7 @@ package libxgb
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -65,40 +66,35 @@ func (dp *Display) unixAddress() string {
 
 // Open ...
 func (dp *Display) Open() error {
-	dp.ctx = context.TODO()
-	defer dp.ctx.Done()
+	ctx := context.TODO()
+	defer ctx.Done()
 	if dp.Protocol != "unix" {
-		if err := dp.openTCP(dp.ctx); err != nil {
+		if err := dp.openTCP(ctx); err != nil {
 			return err
 		}
 	} else {
-		if err := dp.openUnix(dp.ctx); err != nil {
+		if err := dp.openUnix(ctx); err != nil {
 			return err
 		}
 	}
-
-	// send client prefix to Xserver, authorizing and establishing communication
-	xauth, err := xau.GetAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, MIT)
+	xauth, err := xau.GetBestAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, []string{MIT})
 	if err != nil {
-		return fmt.Errorf("xauth error: %w", err)
+		return fmt.Errorf("error getting xauth: %w", err)
 	}
-	clientPrefix, err := xproto.NewClientPrefix(xauth.AuthName, xauth.AuthData)
+	cpfx, err := xproto.NewClientPrefix(xauth.AuthName, xauth.AuthData)
 	if err != nil {
-		return fmt.Errorf("clientPrefix error: %w", err)
+		return fmt.Errorf("error generating client prefix: %w", err)
 	}
-
-	if n, err := dp.connection.Write(clientPrefix); err != nil {
-		return fmt.Errorf("Error writing clientPrefix to connection: %w", err)
-	} else if n < len(clientPrefix) {
-		return fmt.Errorf("Error writing clientPrefix, %d bytes, wrote %d bytes", len(clientPrefix), n)
+	if n, err := dp.connection.Write(cpfx); err != nil {
+		return fmt.Errorf("error writing client prefix to connection: %w", err)
+	} else if n < len(cpfx) {
+		return fmt.Errorf("error writing cpfx to connection, %d of %d bytes written", n, len(cpfx))
 	}
-	response := make([]byte, 8)
-	if n, err := dp.connection.Read(response); err != nil {
-		return fmt.Errorf("Error reading from connection: %w", err)
-	} else if n < 8 {
-		return fmt.Errorf("Error reading from connection, expected 8 bytes, recieved %d", n)
+	spfx := new(xproto.SetupPrefix)
+	if err := binary.Read(dp.connection, binary.LittleEndian, spfx); err != nil {
+		return fmt.Errorf("error reading setup prefix from connection: %w", err)
 	}
-
+	fmt.Println(spfx)
 	// recieve channel
 	//dp.recv = make(chan Message)
 	// send channel
@@ -121,8 +117,8 @@ func (dp *Display) Send(msg Message) {
 
 // Close sends close signal to all channels and closes the connection
 func (dp *Display) Close() error {
-	dp.close <- true
-	close(dp.close)
+	//dp.close <- true
+	//close(dp.close)
 	return dp.connection.Close()
 }
 

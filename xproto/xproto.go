@@ -36,7 +36,8 @@ type Time Card32
 type KeyCode uint8
 type KeySym Card32
 
-// pad pads data to align with 4 byte units
+// pad creates a byteslice containing the data string padded for 4 byte alignment
+// returns the length of the byte slice and the byte slice
 func pad(data string) (int, []byte) {
 	l := len(data)
 	p := int((4 - uint(l)) % 4)
@@ -45,7 +46,7 @@ func pad(data string) (int, []byte) {
 	return len(data), padded
 }
 
-// ClientSetup ...
+// XConnectionClientPrefix holds the data required to initiate handshake with the Xserver
 type XConnectionClientPrefix struct {
 	ByteOrder        Card8
 	_                byte
@@ -56,7 +57,8 @@ type XConnectionClientPrefix struct {
 	_                Card16
 }
 
-// NewClientSetup ...
+// NewXConnectionClientPrefix returns a byteslice representation of XConnectionClientPrefix
+// followed by the auth protocol and data, required for a complete handshake initiation
 func NewXConnectionClientPrefix(authName, authData string) ([]byte, error) {
 	ln, pn := pad(authName)
 	ld, pd := pad(authData)
@@ -85,14 +87,25 @@ func NewXConnectionClientPrefix(authName, authData string) ([]byte, error) {
 	return buff.Bytes(), nil
 }
 
+// XConnectionSetupPrefix status codes
+const (
+	XConnFailed  Card8 = iota // connection refused
+	XConnSuccess              // connection accepted
+	XConnAuth                 // further authentication required
+)
+
+// XConnectionSetupPrefix structure to hold the information recieved from the Xserver
+// following handshake initiation
 type XConnectionSetupPrefix struct {
-	Success      Card8
+	Status       Card8
 	ReasonLen    byte
 	MajorVersion Card16
 	MinorVersion Card16
-	AddBytesLen  Card16
+	DataLen      Card16
 }
 
+// XConnectionSetup structure holds setup information provided by Xserver at connection
+// initiation
 type XConnectionSetup struct {
 	ReleaseNumber      Card32
 	ResourceIDBase     Card32

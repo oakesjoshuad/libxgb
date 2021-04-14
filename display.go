@@ -81,7 +81,7 @@ func (dp *Display) Open() error {
 	if err != nil {
 		return fmt.Errorf("error getting xauth: %w", err)
 	}
-	cpfx, err := xproto.NewClientPrefix(xauth.AuthName, xauth.AuthData)
+	cpfx, err := xproto.NewXConnectionClientPrefix(xauth.AuthName, xauth.AuthData)
 	if err != nil {
 		return fmt.Errorf("error generating client prefix: %w", err)
 	}
@@ -90,10 +90,22 @@ func (dp *Display) Open() error {
 	} else if n < len(cpfx) {
 		return fmt.Errorf("error writing cpfx to connection, %d of %d bytes written", n, len(cpfx))
 	}
-	spfx := new(xproto.SetupPrefix)
+	spfx := new(xproto.XConnectionSetupPrefix)
 	if err := binary.Read(dp.connection, binary.LittleEndian, spfx); err != nil {
 		return fmt.Errorf("error reading setup prefix from connection: %w", err)
 	}
+
+	// if we failed, parse the reason for failure.
+	if spfx.Status == xproto.XConnFailed {
+		buf := new(bytes.Buffer)
+		if ln, err := buf.ReadFrom(dp.connection); err != nil {
+			return fmt.Errorf("error reading reason for Xserver refused connection: %w", err)
+		} else if ln < int64(spfx.ReasonLen) {
+			return fmt.Errorf("error parsing reason for Xserver refused connection")
+		}
+		return fmt.Errorf("Xserver refused connection: %s", buf.String())
+	}
+
 	// recieve channel
 	//dp.recv = make(chan Message)
 	// send channel

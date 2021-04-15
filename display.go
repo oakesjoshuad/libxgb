@@ -65,46 +65,59 @@ func (dp *Display) unixAddress() string {
 }
 
 // Open ...
-func (dp *Display) Open() error {
+func (dp *Display) Open() ([]byte, error) {
 	ctx := context.TODO()
 	defer ctx.Done()
+
 	if dp.Protocol != "unix" {
 		if err := dp.openTCP(ctx); err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		if err := dp.openUnix(ctx); err != nil {
-			return err
+			return nil, err
 		}
 	}
+
 	xauth, err := xau.GetBestAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, []string{MIT})
 	if err != nil {
-		return fmt.Errorf("error getting xauth: %w", err)
+		return nil, fmt.Errorf("error getting xauth: %w", err)
 	}
 	cpfx, err := xproto.NewXConnectionClientPrefix(xauth.AuthName, xauth.AuthData)
 	if err != nil {
-		return fmt.Errorf("error generating client prefix: %w", err)
+		return nil, fmt.Errorf("error generating client prefix: %w", err)
 	}
 	if n, err := dp.connection.Write(cpfx); err != nil {
-		return fmt.Errorf("error writing client prefix to connection: %w", err)
+		return nil, fmt.Errorf("error writing client prefix to connection: %w", err)
 	} else if n < len(cpfx) {
-		return fmt.Errorf("error writing cpfx to connection, %d of %d bytes written", n, len(cpfx))
+		return nil, fmt.Errorf("error writing cpfx to connection, %d of %d bytes written", n, len(cpfx))
 	}
-	spfx := new(xproto.XConnectionSetupPrefix)
-	if err := binary.Read(dp.connection, binary.LittleEndian, spfx); err != nil {
-		return fmt.Errorf("error reading setup prefix from connection: %w", err)
+
+	spfx, err := xproto.NewXConnectionSetupPrefix(dp.connection)
+	if err != nil {
+		return nil, err
 	}
 
 	// if we failed, parse the reason for failure.
-	if spfx.Status == xproto.XConnFailed {
+	if spfx.Status == xproto.XConnectionFailed {
 		buf := new(bytes.Buffer)
 		if ln, err := buf.ReadFrom(dp.connection); err != nil {
-			return fmt.Errorf("error reading reason for Xserver refused connection: %w", err)
+			return nil, fmt.Errorf("error reading reason for refused connection: %w", err)
 		} else if ln < int64(spfx.ReasonLen) {
-			return fmt.Errorf("error parsing reason for Xserver refused connection")
+			return nil, fmt.Errorf("error parsing reason for refused connection")
 		}
-		return fmt.Errorf("Xserver refused connection: %s", buf.String())
+		return nil, fmt.Errorf("Xserver refused connection: %s", buf.String())
+	} else if spfx.Status == xproto.XConnectionAuth {
+		buf := new(bytes.Buffer)
+		if ln, err := buf.ReadFrom(dp.connection); err != nil {
+			return nil, fmt.Errorf("error reading extra authentication information reason: %w", err)
+		} else if ln < int64(spfx.ReasonLen) {
+			return nil, fmt.Errorf("error parsing reason for extra authentication, %d bytes of %d bytes read", ln, spfx.ReasonLen)
+		}
+		return nil, fmt.Errorf("Xserver requires extra authentication: %s", buf.String())
 	}
+
+	// successfully initiated connection with Xserver, parse the returned setup information
 
 	// recieve channel
 	//dp.recv = make(chan Message)
@@ -118,7 +131,7 @@ func (dp *Display) Open() error {
 	//go dp.rxtx()
 	//go dp.err()
 
-	return nil
+	return nil, nil
 }
 
 // Send puts a Message on the send channel

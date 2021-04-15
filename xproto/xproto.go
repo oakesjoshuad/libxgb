@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 )
 
 const (
@@ -89,9 +90,9 @@ func NewXConnectionClientPrefix(authName, authData string) ([]byte, error) {
 
 // XConnectionSetupPrefix status codes
 const (
-	XConnFailed  Card8 = iota // connection refused
-	XConnSuccess              // connection accepted
-	XConnAuth                 // further authentication required
+	XConnectionFailed  Card8 = iota // connection refused
+	XConnectionSuccess              // connection accepted
+	XConnectionAuth                 // further authentication required
 )
 
 // XConnectionSetupPrefix structure to hold the information recieved from the Xserver
@@ -102,6 +103,32 @@ type XConnectionSetupPrefix struct {
 	MajorVersion Card16
 	MinorVersion Card16
 	DataLen      Card16
+}
+
+func NewXConnectionSetupPrefix(rdr io.Reader) (*XConnectionSetupPrefix, error) {
+	spfx := new(XConnectionSetupPrefix)
+	if err := binary.Read(rdr, endian, spfx); err != nil {
+		return nil, fmt.Errorf("error reading setup prefix from connection: %w", err)
+	}
+	// if we failed, parse the reason for failure.
+	if spfx.Status == XConnectionFailed {
+		buf := new(bytes.Buffer)
+		if ln, err := buf.ReadFrom(rdr); err != nil {
+			return nil, fmt.Errorf("error reading reason for refused connection: %w", err)
+		} else if ln < int64(spfx.ReasonLen) {
+			return nil, fmt.Errorf("error parsing reason for refused connection")
+		}
+		return nil, fmt.Errorf("Xserver refused connection: %s", buf.String())
+	} else if spfx.Status == XConnectionAuth {
+		buf := new(bytes.Buffer)
+		if ln, err := buf.ReadFrom(rdr); err != nil {
+			return nil, fmt.Errorf("error reading extra authentication information reason: %w", err)
+		} else if ln < int64(spfx.ReasonLen) {
+			return nil, fmt.Errorf("error parsing reason for extra authentication, %d bytes of %d bytes read", ln, spfx.ReasonLen)
+		}
+		return nil, fmt.Errorf("Xserver requires extra authentication: %s", buf.String())
+	}
+	return spfx, nil
 }
 
 // XConnectionSetup structure holds setup information provided by Xserver at connection

@@ -8,14 +8,17 @@ import (
 	"net"
 	"os"
 	"strings"
+
+	"github.com/oakesjoshuad/libxgb/xau"
+	"github.com/oakesjoshuad/libxgb/xproto"
 )
 
 // Display ...
 type Display struct {
 	Host, Protocol, Number, Screen string
-
 	// encapsulating the connection to expose only needed functionality.
 	connection connection
+	ctx        context.Context
 	// channels to buffer communication
 	send  chan Message
 	recv  chan Message
@@ -29,8 +32,8 @@ type connection struct {
 
 // Message is the primary method of interacting with the Xserver through the display connection. It consists of the message payload in byte string form and the message length.
 type Message struct {
-	length  int64
-	payload []byte
+	Length  int
+	Payload []byte
 }
 
 // unixBase contains the file path of the unix "socket"
@@ -61,31 +64,73 @@ func (dp *Display) unixAddress() string {
 }
 
 // Open ...
-func (dp *Display) Open() error {
-	ctx := context.Background()
-	return dp.OpenWithContext(ctx)
-}
+func (dp *Display) Open() ([]byte, error) {
+	ctx := context.TODO()
+	defer ctx.Done()
 
-// OpenWithContext ...
-func (dp *Display) OpenWithContext(pctx context.Context) (err error) {
-	ctx, cancel := context.WithCancel(pctx)
-	defer cancel()
 	if dp.Protocol != "unix" {
-		err = dp.openTCP(ctx)
+		if err := dp.openTCP(ctx); err != nil {
+			return nil, err
+		}
 	} else {
-		err = dp.openUnix(ctx)
+		if err := dp.openUnix(ctx); err != nil {
+			return nil, err
+		}
 	}
+
+	xauth, err := xau.GetBestAuthByAddr(xau.FamilyLocal, dp.Host, dp.Number, []string{MIT})
+	if err != nil {
+		return nil, fmt.Errorf("error getting xauth: %w", err)
+	}
+	cpfx, err := xproto.NewXConnectionClientPrefix(xauth.AuthName, xauth.AuthData)
+	if err != nil {
+		return nil, fmt.Errorf("error generating client prefix: %w", err)
+	}
+	if n, err := dp.connection.Write(cpfx); err != nil {
+		return nil, fmt.Errorf("error writing client prefix to connection: %w", err)
+	} else if n < len(cpfx) {
+		return nil, fmt.Errorf("error writing cpfx to connection, %d of %d bytes written", n, len(cpfx))
+	}
+
+	spfx, err := xproto.NewXConnectionSetupPrefix(dp.connection)
+	if err != nil {
+		return nil, err
+	}
+
+	// if we failed, parse the reason for failure.
+	if spfx.Status == xproto.XConnectionFailed {
+		buf := new(bytes.Buffer)
+		if ln, err := buf.ReadFrom(dp.connection); err != nil {
+			return nil, fmt.Errorf("error reading reason for refused connection: %w", err)
+		} else if ln < int64(spfx.ReasonLen) {
+			return nil, fmt.Errorf("error parsing reason for refused connection")
+		}
+		return nil, fmt.Errorf("Xserver refused connection: %s", buf.String())
+	} else if spfx.Status == xproto.XConnectionAuth {
+		buf := new(bytes.Buffer)
+		if ln, err := buf.ReadFrom(dp.connection); err != nil {
+			return nil, fmt.Errorf("error reading extra authentication information reason: %w", err)
+		} else if ln < int64(spfx.ReasonLen) {
+			return nil, fmt.Errorf("error parsing reason for extra authentication, %d bytes of %d bytes read", ln, spfx.ReasonLen)
+		}
+		return nil, fmt.Errorf("Xserver requires extra authentication: %s", buf.String())
+	}
+
+	// successfully initiated connection with Xserver, parse the returned setup information
+
 	// recieve channel
-	dp.recv = make(chan Message)
+	//dp.recv = make(chan Message)
 	// send channel
-	dp.send = make(chan Message)
+	//dp.send = make(chan Message)
+	// error channel
+	//dp.errs = make(chan error)
 	// sentinal channel to signal close
-	dp.close = make(chan bool)
+	//dp.close = make(chan bool)
 
-	go dp.tx()
-	go dp.rx()
+	//go dp.rxtx()
+	//go dp.err()
 
-	return
+	return nil, nil
 }
 
 // Send puts a Message on the send channel
@@ -93,49 +138,51 @@ func (dp *Display) Send(msg Message) {
 	dp.send <- msg
 }
 
-// Recieve pulls a Message from the recv channel
-func (dp *Display) Recieve() Message {
-	return <-dp.recv
-}
-
 // Close sends close signal to all channels and closes the connection
 func (dp *Display) Close() error {
-	dp.close <- true
-	close(dp.close)
+	//dp.close <- true
+	//close(dp.close)
 	return dp.connection.Close()
 }
 
 // tx transmit Message to Xserver
-func (dp *Display) tx() {
+func (dp *Display) rxtx() {
 	select {
 	case msg := <-dp.send:
-		if n, err := dp.connection.Write(msg.payload); err != nil {
+		if n, err := dp.connection.Write(msg.Payload); err != nil {
 			dp.errs <- err
-		} else if n != int(msg.length) {
+		} else if n != int(msg.Length) {
 			dp.errs <- errors.New("Display.tx did not transmit full Message")
 		}
 	case <-dp.close:
 		close(dp.send)
-	}
-}
-
-// rx recieve Message from Xserver
-func (dp *Display) rx() {
-	select {
-	case <-dp.close:
 		close(dp.recv)
+		close(dp.errs)
 	default:
 		var buff bytes.Buffer
 		if n, err := buff.ReadFrom(dp.connection); err != nil {
-			dp.recv <- Message{length: n, payload: buff.Bytes()}
+			dp.errs <- fmt.Errorf("Error reading response from Xserver: %w", err)
+		} else if n > 0 {
+			dp.recv <- Message{Length: int(n), Payload: buff.Bytes()}
 		}
 	}
 }
 
+func (dp *Display) err() {
+	select {
+	case <-dp.close:
+		close(dp.errs)
+	case err := <-dp.errs:
+		fmt.Println(err)
+	}
+}
+
+// openTCP ...
 func (dp *Display) openTCP(pctx context.Context) (err error) {
 	return errors.New("openTCP function not implemented")
 }
 
+// openUnix ...
 func (dp *Display) openUnix(pctx context.Context) error {
 	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()
@@ -155,9 +202,8 @@ func (dp *Display) openUnix(pctx context.Context) error {
 }
 
 // NewDisplay returns a populated Display structure with sane defaults; constructed from
-// a, validated, passed in display string or the environment variable DISPLAY
+// a validated input string or the environment variable DISPLAY
 func NewDisplay(hostname string) (dp *Display, err error) {
-
 	if !strings.Contains(hostname, ":") {
 		if hostname = os.Getenv("DISPLAY"); hostname == "" {
 			err = ErrDisplayName
@@ -171,7 +217,9 @@ func NewDisplay(hostname string) (dp *Display, err error) {
 	dot := strings.LastIndex(hostname, ".")
 
 	if slash < 0 {
-		dp.Host = "localhost"
+		if dp.Host, err = os.Hostname(); err != nil {
+			return
+		}
 		dp.Protocol = "unix"
 	} else {
 		dp.Host = hostname[:slash]

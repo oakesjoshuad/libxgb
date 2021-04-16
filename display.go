@@ -3,7 +3,6 @@ package libxgb
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"

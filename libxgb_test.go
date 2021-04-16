@@ -45,7 +45,7 @@ func TestInternal(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if err := dp.Open(); err != nil {
+		if _, err := dp.Open(); err != nil {
 			t.Fatal(err)
 		}
 		err = dp.Close()

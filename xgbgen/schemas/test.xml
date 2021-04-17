@@ -32,5 +32,24 @@ authorization from the authors.
     <field type="CARD8" name="byte1" />
     <field type="CARD8" name="byte2" />
   </struct>
+   
+  <xidtype name="WINDOW" />
+  
+  <xidtype name="PIXMAP" />
+  
+  <xidtype name="CURSOR" />
+  
+  <xidtype name="FONT" />
+  
+  <xidtype name="GCONTEXT" />
+  
+  <xidtype name="COLORMAP" />
+  
+  <xidtype name="ATOM" />
+  
+  <xidunion name="DRAWABLE">
+    <type>WINDOW</type>
+    <type>PIXMAP</type>
+  </xidunion>
 
 </xcb>

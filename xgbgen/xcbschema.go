@@ -26,15 +26,22 @@ func (x *xcb) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 		}
 		switch t := tkn.(type) {
 		case xml.StartElement:
+			var elt interface{}
 			switch t.Name.Local {
 			case "struct":
-				elt := new(xcbStruct)
-				if err := d.DecodeElement(elt, &t); err != nil {
-					return err
-				}
-				x.Elements = append(x.Elements, elt)
+				elt = new(xcbStruct)
+			case "xidtype":
+				elt = new(xcbXidType)
+			case "xidunion":
+				elt = new(xcbXidUnion)
+			case "typedef":
+				elt = new(xcbTypedef)
 			default:
 			}
+			if err := d.DecodeElement(&elt, &t); err != nil {
+				return err
+			}
+			x.Elements = append(x.Elements, elt)
 		case xml.EndElement:
 			if t == start.End() {
 				return nil

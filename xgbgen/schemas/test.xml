@@ -52,4 +52,27 @@ authorization from the authors.
     <type>PIXMAP</type>
   </xidunion>
 
+  <xidunion name="FONTABLE">
+    <type>FONT</type>
+    <type>GCONTEXT</type>
+  </xidunion>
+  
+  <typedef oldname="CARD32" newname="BOOL32" />
+  <typedef oldname="CARD32" newname="VISUALID" />
+
+  <typedef oldname="CARD32" newname="TIMESTAMP" />
+
+  <typedef oldname="CARD32" newname="KEYSYM" />
+
+  <typedef oldname="CARD8" newname="KEYCODE" />
+ 
+  <typedef oldname="CARD32" newname="KEYCODE32" />
+
+  <typedef oldname="CARD8" newname="BUTTON" />
+
+  <struct name="POINT">
+    <field type="INT16" name="x" />
+    <field type="INT16" name="y" />
+  </struct>
+
 </xcb>

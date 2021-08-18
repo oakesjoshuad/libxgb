@@ -14,10 +14,10 @@ const (
 )
 
 var (
-	pack   = binary.Write
-	endian = binary.LittleEndian
-	MSB    = 0x42
-	LSB    = 0x6c
+	pack      = binary.Write
+	byteOrder = binary.BigEndian
+	MSB       = 0x42
+	LSB       = 0x6c
 )
 
 type Card8 uint8
@@ -65,14 +65,14 @@ func NewXConnectionClientPrefix(authName, authData string) ([]byte, error) {
 	ld, pd := pad(authData)
 
 	cs := new(XConnectionClientPrefix)
-	cs.ByteOrder = Card8(LSB)
+	cs.ByteOrder = Card8(MSB)
 	cs.MajorVersion = XProtocolVersion
 	cs.MinorVersion = XProtocolRevision
 	cs.AuthProtoNameLen = Card16(ln)
 	cs.AuthProtoDataLen = Card16(ld)
 
 	buff := new(bytes.Buffer)
-	if err := binary.Write(buff, endian, cs); err != nil {
+	if err := binary.Write(buff, byteOrder, cs); err != nil {
 		return []byte{}, fmt.Errorf("error while writing ClientPrefix to buffer: %w", err)
 	}
 	if n, err := buff.Write(pn); err != nil {
@@ -107,7 +107,7 @@ type XConnectionSetupPrefix struct {
 
 func NewXConnectionSetupPrefix(rdr io.Reader) (*XConnectionSetupPrefix, error) {
 	spfx := new(XConnectionSetupPrefix)
-	if err := binary.Read(rdr, endian, spfx); err != nil {
+	if err := binary.Read(rdr, byteOrder, spfx); err != nil {
 		return nil, fmt.Errorf("error reading setup prefix from connection: %w", err)
 	}
 	// if we failed, parse the reason for failure.

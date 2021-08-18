@@ -82,7 +82,7 @@ func (dp *Display) Open() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error getting xauth: %w", err)
 	}
-	cpfx, err := xproto.NewXConnectionClientPrefix(xauth.AuthName, xauth.AuthData)
+	cpfx, err := xproto.NewXConnectionClientPrefix(xauth.Name, xauth.Data)
 	if err != nil {
 		return nil, fmt.Errorf("error generating client prefix: %w", err)
 	}

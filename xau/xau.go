@@ -31,11 +31,11 @@ var (
 
 // Xauth ...
 type Xauth struct {
-	Family   uint16
-	Address  string
-	Number   string
-	AuthName string
-	AuthData string
+	Family  uint16
+	Address string
+	Number  string
+	Name    string
+	Data    string
 }
 
 func (xa *Xauth) String() string {
@@ -43,8 +43,8 @@ func (xa *Xauth) String() string {
 		xa.Family,
 		xa.Address,
 		xa.Number,
-		xa.AuthName,
-		xa.AuthData,
+		xa.Name,
+		xa.Data,
 	)
 }
 
@@ -74,10 +74,10 @@ func xauReadAuth(rdr io.Reader) (xa *Xauth, err error) {
 	if xa.Number, err = readString(rdr); err != nil {
 		return
 	}
-	if xa.AuthName, err = readString(rdr); err != nil {
+	if xa.Name, err = readString(rdr); err != nil {
 		return
 	}
-	if xa.AuthData, err = readString(rdr); err != nil {
+	if xa.Data, err = readString(rdr); err != nil {
 		return
 	}
 	return
@@ -95,7 +95,7 @@ func GetAuthByAddr(family uint16, address, number, name string) (xa *Xauth, err 
 		return
 	}
 	for xa, err = xauReadAuth(xaufd); err == nil; xa, err = xauReadAuth(xaufd) {
-		if (family == FamilyWild || xa.Family == FamilyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) && (xa.AuthName == name) {
+		if (family == FamilyWild || xa.Family == FamilyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) && (xa.Name == name) {
 			return
 		}
 	}
@@ -116,7 +116,7 @@ func GetBestAuthByAddr(family uint16, address, number string, authTypes []string
 	for xa, err = xauReadAuth(xaufd); err == nil; xa, err = xauReadAuth(xaufd) {
 		if (family == FamilyWild || xa.Family == FamilyWild || (xa.Family == family && xa.Address == address)) && (xa.Number == number) {
 			for _, authType := range authTypes {
-				if authType == xa.AuthName {
+				if authType == xa.Name {
 					best = xa
 				}
 			}
